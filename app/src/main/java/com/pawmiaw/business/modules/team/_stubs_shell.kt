@@ -13,17 +13,9 @@ import com.pawmiaw.business.*
 //  each shows only its name.
 //
 
-// STUB: Modules/Team/StaffMemberScreen.swift
-@Composable
-fun StaffMemberScreen(memberId: String, modifier: Modifier = Modifier) = ShellStub("StaffMemberScreen", modifier)
-
 // STUB: Modules/Team/SettingsScreen.swift
 @Composable
 fun SettingsScreen(modifier: Modifier = Modifier) = ShellStub("SettingsScreen", modifier)
-
-// STUB: Modules/Team/StaffScreen.swift
-@Composable
-fun StaffScreen(modifier: Modifier = Modifier) = ShellStub("StaffScreen", modifier)
 
 // STUB: Modules/Team/AvailabilityScreen.swift
 @Composable
@@ -32,10 +24,6 @@ fun AvailabilityScreen(modifier: Modifier = Modifier) = ShellStub("AvailabilityS
 // STUB: Modules/Team/NotificationSettingsScreen.swift
 @Composable
 fun NotificationSettingsScreen(modifier: Modifier = Modifier) = ShellStub("NotificationSettingsScreen", modifier)
-
-// STUB: Modules/Team/AccountSecurityScreen.swift
-@Composable
-fun AccountSecurityScreen(modifier: Modifier = Modifier) = ShellStub("AccountSecurityScreen", modifier)
 
 @Composable
 private fun ShellStub(name: String, modifier: Modifier) {
