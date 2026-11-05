@@ -17,14 +17,6 @@ import com.pawmiaw.business.*
 @Composable
 fun ClientDetailScreen(clientId: String, modifier: Modifier = Modifier) = ShellStub("ClientDetailScreen", modifier)
 
-// STUB: Modules/Clients/PatientChartScreen.swift
-@Composable
-fun ClientPetScreen(clientId: String, petId: String, modifier: Modifier = Modifier) = ShellStub("ClientPetScreen", modifier)
-
-// STUB: Modules/Clients/PatientChartScreen.swift
-@Composable
-fun PatientChartScreen(petId: String, modifier: Modifier = Modifier) = ShellStub("PatientChartScreen", modifier)
-
 // STUB: Modules/Clients/ClientsListScreen.swift
 @Composable
 fun ClientsScreen(modifier: Modifier = Modifier) = ShellStub("ClientsScreen", modifier)
@@ -32,14 +24,6 @@ fun ClientsScreen(modifier: Modifier = Modifier) = ShellStub("ClientsScreen", mo
 // STUB: Modules/Clients/ClientsListScreen.swift
 @Composable
 fun PatientsScreen(modifier: Modifier = Modifier) = ShellStub("PatientsScreen", modifier)
-
-// STUB: Modules/Clients/DueScreen.swift
-@Composable
-fun DueScreen(modifier: Modifier = Modifier) = ShellStub("DueScreen", modifier)
-
-// STUB: Modules/Clients/InvitationsScreen.swift
-@Composable
-fun InvitationsScreen(clientId: String? = null, modifier: Modifier = Modifier) = ShellStub("InvitationsScreen", modifier)
 
 @Composable
 private fun ShellStub(name: String, modifier: Modifier) {
