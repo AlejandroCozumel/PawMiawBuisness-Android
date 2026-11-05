@@ -84,6 +84,7 @@ fun RouteView(route: ProviderRoute, modifier: Modifier = Modifier) {
                 is ProviderRoute.schedule -> ScheduleScreen(filter = route.filter)
                 is ProviderRoute.newRecord -> NewRecordScreen(prefill = route.prefill)
                 is ProviderRoute.olfatoPetChat -> OlfatoPetChatScreen(petId = route.petId)
+                is ProviderRoute.page -> route.content()
             }
         }
     }
