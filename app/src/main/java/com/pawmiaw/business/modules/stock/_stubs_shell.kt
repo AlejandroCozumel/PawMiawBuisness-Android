@@ -17,10 +17,6 @@ import com.pawmiaw.business.*
 @Composable
 fun InventoryScreen(modifier: Modifier = Modifier) = ShellStub("InventoryScreen", modifier)
 
-// STUB: Modules/Stock/StockPharmacy.swift
-@Composable
-fun PharmacyScreen(modifier: Modifier = Modifier) = ShellStub("PharmacyScreen", modifier)
-
 @Composable
 private fun ShellStub(name: String, modifier: Modifier) {
     providerPage(name) { Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(name) } }

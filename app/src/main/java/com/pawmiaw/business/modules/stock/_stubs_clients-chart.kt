@@ -19,25 +19,6 @@ data class StockRxPet(
     val clientName: String? = null,
 )
 
-// STUB: Modules/Stock/StockPharmacy.swift
-data class StockRxTarget(val id: String)
-
-// STUB: Modules/Stock/StockPharmacy.swift
-class StockRxRights(w: Workspace, counts: StockPharmacyCounts? = null) {
-    val canRead: Boolean = TODO("STUB: StockPharmacy.swift")
-    val canWrite: Boolean = TODO("STUB: StockPharmacy.swift")
-}
-
-// STUB: Modules/Stock/StockPharmacy.swift
-object StockRxWords {
-    fun state(state: String): String = TODO("STUB: StockPharmacy.swift")
-    fun stateState(state: String): ProviderState = TODO("STUB: StockPharmacy.swift")
-}
-
-// STUB: Modules/Stock/StockPharmacy.swift
-@Composable
-fun StockControlledChip(label: String? = null, modifier: Modifier = Modifier) {}
-
 // STUB: Modules/Stock/StockPrescriptionSheet.swift
 @Composable
 fun StockPrescriptionSheet(
