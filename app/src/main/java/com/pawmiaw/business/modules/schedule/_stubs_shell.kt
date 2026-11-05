@@ -13,10 +13,6 @@ import com.pawmiaw.business.*
 //  each shows only its name.
 //
 
-// STUB: Modules/Schedule/AppointmentDetailScreen.swift
-@Composable
-fun AppointmentDetailScreen(appointmentId: String, modifier: Modifier = Modifier) = ShellStub("AppointmentDetailScreen", modifier)
-
 // STUB: Modules/Schedule/SchedBookVisitScreen.swift
 @Composable
 fun BookVisitScreen(prefill: BookingPrefill, modifier: Modifier = Modifier) = ShellStub("BookVisitScreen", modifier)
