@@ -1,5 +1,7 @@
 package com.pawmiaw.business
 
+import androidx.activity.compose.BackHandler
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.CubicBezierEasing
@@ -299,6 +301,12 @@ fun ProviderModal(
     // with changes asks, as the web does (iOS `.interactiveDismissDisabled` + DismissAttemptReader).
     if (!asPage) {
         DismissAttemptReader(blocks = isDirty || isWorking) { if (isDirty && !isWorking) confirmDiscard = true }
+    } else {
+        // Opened as a page (no back button, as iOS): the back gesture does what Cancel does —
+        // asks first when something changed, waits while a save runs.
+        BackHandler(enabled = !confirmDiscard) {
+            if (isWorking) Unit else if (isDirty) confirmDiscard = true else dismiss()
+        }
     }
 
     Column(

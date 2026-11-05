@@ -624,7 +624,18 @@ private object PageTitles {
  * call sites: the bar follows where the page is, not the flag.
  */
 @Composable
-fun providerPage(title: String, root: Boolean = false, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+fun providerPage(
+    title: String,
+    root: Boolean = false,
+    /**
+     * iOS `.navigationBarBackButtonHidden(true)` on a page whose content is a ProviderModal opened
+     * as the page (booking, a new record): no bar at all — the modal's tinted header is the page's
+     * header and its Cancel (or the back gesture, which asks first when something changed) leaves.
+     */
+    hidesBackButton: Boolean = false,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
     val navigator = LocalNavigator.current
     val slot = LocalPageSlot.current
     val depth = if (slot.navigator === navigator) slot.depth else 0
@@ -639,7 +650,7 @@ fun providerPage(title: String, root: Boolean = false, modifier: Modifier = Modi
     val docked = LocalSizeClass.current == SizeClass.regular
     val dismiss = LocalDismiss.current
     val bar = remember { PageBarState() }
-    val showsBar = pushed || inSheet || docked
+    val showsBar = (pushed || inSheet || docked) && !(hidesBackButton && !inSheet)
 
     Column(modifier.fillMaxSize().background(Theme.canvas)) {
         if (showsBar) {

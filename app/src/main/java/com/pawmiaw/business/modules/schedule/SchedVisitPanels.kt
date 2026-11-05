@@ -828,8 +828,13 @@ fun SchedVisitGroupCard(appointment: SchedAppointment, modifier: Modifier = Modi
     val others = (group.pets ?: emptyList()).filter { it.appointmentId != appointment.id }
     if (!(group.isSession || others.isNotEmpty())) return
     val nav = LocalNavigator.current
-    // A session opens whole (iOS pushes SvcSessionScreen; there is no route for one, so it opens as a page in a sheet).
+    // A session opens whole (iOS pushes SvcSessionScreen): a page of its own on the stack.
     var session by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(session) {
+        val id = session ?: return@LaunchedEffect
+        session = null
+        nav.push(ProviderRoute.page("session:$id") { SvcSessionScreen(sessionId = id) })
+    }
     val card = RoundedCornerShape(Theme.cardRadius)
     val box = RoundedCornerShape(Theme.boxRadius)
     Column(
@@ -898,11 +903,6 @@ fun SchedVisitGroupCard(appointment: SchedAppointment, modifier: Modifier = Modi
                     }
                 }
             }
-        }
-    }
-    session?.let { id ->
-        AppSheet(onDismissRequest = { session = null }) {
-            Box(Modifier.sheetPresentation(setOf(PresentationDetent.large))) { SvcSessionScreen(sessionId = id) }
         }
     }
 }

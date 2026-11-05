@@ -62,7 +62,7 @@ fun BookVisitScreen(prefill: BookingPrefill, modifier: Modifier = Modifier) {
     }
 
     // The booking's own sheet, open as the page (its tinted header is the page's header).
-    providerPage(if (prefill.walkIn) L("Walk-in") else L("New visit"), modifier = modifier) {
+    providerPage(if (prefill.walkIn) L("Walk-in") else L("New visit"), hidesBackButton = canBook, modifier = modifier) {
         if (canBook) {
             RequireLocation {
                 CompositionLocalProvider(LocalModalAsPage provides true) {
