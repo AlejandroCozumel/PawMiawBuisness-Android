@@ -1148,7 +1148,7 @@ fun StaysPlainField(
 ) {
     val error = key?.let { form?.error(it) }
     StaysOnChange(text.value) { if (key != null) form?.clear(key) }
-    Column(modifier.scrollID(key ?: prompt), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier.formScrollTarget(key ?: prompt, form), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         BasicTextField(
             value = text.value,
             onValueChange = { text.value = it },
@@ -1185,7 +1185,7 @@ fun <Value> StaysPlainMenu(
 ) {
     val error = key?.let { form?.error(it) }
     var open by remember { mutableStateOf(false) }
-    Column(modifier.scrollID(key ?: accessibility), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier.formScrollTarget(key ?: accessibility, form), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Box {
             Row(
                 Modifier
@@ -1242,7 +1242,7 @@ fun StaysPlainMoney(
         cents.value = Money.parse(value)
         if (key != null) form?.clear(key)
     }
-    Column(modifier.scrollID(key ?: "money"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier.formScrollTarget(key ?: "money", form), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             BasicTextField(
                 value = text,

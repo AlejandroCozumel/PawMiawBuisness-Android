@@ -30,18 +30,3 @@ fun IconBadge(
     modifier: Modifier = Modifier,
 ) {}
 
-// STUB: Design/Forms.swift
-@Composable
-fun ToggleRow(title: String, subtitle: String? = null, isOn: MutableState<Boolean>, modifier: Modifier = Modifier) {}
-
-// STUB: Design/Buttons.swift
-@Composable
-fun IconCircleButton(
-    systemImage: String,
-    label: String,
-    tint: Color = Theme.inkSoft,
-    size: Dp = 36.dp,
-    bordered: Boolean = true,
-    modifier: Modifier = Modifier,
-    action: () -> Unit,
-) {}
