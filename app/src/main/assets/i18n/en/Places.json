@@ -1,0 +1,16 @@
+{
+ "%@ added.@location": "%@ added.",
+ "%@ added.@room": "%@ added.",
+ "%@ is active again.@location": "%@ is active again.",
+ "%@ is active again.@room": "%@ is active again.",
+ "Active@locations": "Active",
+ "All@rooms": "All",
+ "Archived@location-one": "Archived",
+ "Archived@locations": "Archived",
+ "Archived@room-one": "Archived",
+ "Archived@rooms": "Archived",
+ "Keep it@location": "Keep it",
+ "Keep it@room": "Keep it",
+ "Occupied@ward": "Occupied",
+ "Other@room": "Other"
+}

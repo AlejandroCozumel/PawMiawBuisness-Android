@@ -1,0 +1,20 @@
+{
+ "Already linked@pet": "Already linked",
+ "Done@followup": "Done",
+ "Done@visit": "Done",
+ "Expired@filter": "Expired",
+ "Expired@status": "Expired",
+ "Expires %@@when": "Expires %@",
+ "Linked@filter": "Linked",
+ "Linked@status": "Linked",
+ "Open@followup": "Open",
+ "Open@invoice": "Open",
+ "Other@species": "Other",
+ "Overdue@plural": "Overdue",
+ "Overdue@status": "Overdue",
+ "Pending@filter": "Pending",
+ "Pending@status": "Pending",
+ "Revoked@filter": "Revoked",
+ "Revoked@status": "Revoked",
+ "To confirm@status": "To confirm"
+}

@@ -1,0 +1,19 @@
+{
+ "Active@state": "Active",
+ "All@records": "All",
+ "Booked@visit": "Booked",
+ "Cancelled@visit": "Cancelled",
+ "Completed@state": "Completed",
+ "Done@plural": "Done",
+ "Finished@visit": "Finished",
+ "From %@@day": "From %@",
+ "Inactive@state": "Inactive",
+ "Linked@visit": "Linked",
+ "None@follow-up": "None",
+ "Open@status": "Open",
+ "Other@route": "Other",
+ "Record@one": "Record",
+ "Remove %@@file": "Remove %@",
+ "Signed@plural": "Signed",
+ "Until %@@day": "Until %@"
+}

@@ -1,0 +1,18 @@
+{
+ "Active@rx": "Active",
+ "All@rx": "All",
+ "Archived@medicine": "Archived",
+ "Back@rx": "Back",
+ "Cancelled@rx": "Cancelled",
+ "Count@register": "Count",
+ "Counted@movement": "Counted",
+ "Draft@rx": "Draft",
+ "Expired@lot": "Expired",
+ "Expired@rx": "Expired",
+ "Expiring soon@rx": "Expiring soon",
+ "Other@route": "Other",
+ "Received@register": "Received",
+ "Returned@register": "Returned",
+ "Why@refill": "Why",
+ "Written off@register": "Written off"
+}

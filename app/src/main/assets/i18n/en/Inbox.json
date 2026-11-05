@@ -1,0 +1,23 @@
+{
+ "%d h@wait": "%d h",
+ "%d min@wait": "%d min",
+ "Active@show": "Active",
+ "Active@stat": "Active",
+ "All@notification": "All",
+ "Clients@area": "Clients",
+ "Done@notification": "Done",
+ "Everyone@for": "Everyone",
+ "Needs you@notification": "Needs you",
+ "Open visit@notification": "Open visit",
+ "Open@notification": "Open",
+ "Open@olfato": "Open",
+ "Records@area": "Records",
+ "Schedule@action": "Schedule",
+ "Schedule@area": "Schedule",
+ "Send@olfato": "Send",
+ "Sign@notification": "Sign",
+ "Team@area": "Team",
+ "Unread@stat": "Unread",
+ "Urgent@notification": "Urgent",
+ "in %d min@notification": "in %d min"
+}

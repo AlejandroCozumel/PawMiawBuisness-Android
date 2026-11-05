@@ -1,0 +1,9 @@
+{
+ "%d arriving late": "%d late",
+ "%d done (plural)": "%d done",
+ "%d skipped (plural)": "%d skipped",
+ "Cancelled (stay)": "Cancelled",
+ "Estimated total": "Estimate",
+ "Expires %@@ask": "Expires %@",
+ "Missed visit": "Missed"
+}
