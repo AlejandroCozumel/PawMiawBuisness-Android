@@ -25,13 +25,6 @@ fun StoreCheckoutScreen(prefill: StorePrefill, modifier: Modifier = Modifier) = 
 @Composable
 fun CatalogScreen(openItemId: String? = null, modifier: Modifier = Modifier) = ShellStub("CatalogScreen", modifier)
 
-// STUB: Modules/Money/FinanceScreen.swift
-@Composable
-fun FinanceScreen(modifier: Modifier = Modifier) = ShellStub("FinanceScreen", modifier)
-
-// STUB: Modules/Money/BillingScreen.swift
-@Composable
-fun BillingScreen(modifier: Modifier = Modifier) = ShellStub("BillingScreen", modifier)
 
 @Composable
 private fun ShellStub(name: String, modifier: Modifier) {
