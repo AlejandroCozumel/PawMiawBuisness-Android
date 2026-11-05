@@ -382,32 +382,15 @@ private fun TeamSettingsNavRow(
  */
 @Composable
 private fun <T : Any> TeamPushedPage(item: T?, onBack: () -> Unit, content: @Composable (T) -> Unit) {
-    var shown by remember { mutableStateOf<T?>(null) }
-    LaunchedEffect(item) { if (item != null) shown = item }
-    AnimatedVisibility(
-        visible = item != null,
-        enter = slideInHorizontally(tween(320)) { it },
-        exit = slideOutHorizontally(tween(260)) { it },
-    ) {
-        val page = item ?: shown
-        if (page != null) {
-            val back by rememberUpdatedState(onBack)
-            BackHandler { back() }
-            val slot = LocalPageSlot.current
-            CompositionLocalProvider(
-                LocalIsPushedPage provides true,
-                LocalDismiss provides { back() },
-                LocalPageSlot provides PageSlot(slot.navigator, slot.depth + 1),
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(Theme.canvas)
-                        // A page sliding in takes the touches meant for the one under it.
-                        .pointerInput(Unit) {}
-                ) { content(page) }
-            }
-        }
+    // iOS `.navigationDestination(item:)` / `NavigationLink`: pushed on the stack as any page
+    // (`ProviderRoute.page`), and the trigger cleared at once.
+    val navigator = LocalNavigator.current
+    val clear by rememberUpdatedState(onBack)
+    val body by rememberUpdatedState(content)
+    LaunchedEffect(item) {
+        val page = item ?: return@LaunchedEffect
+        clear()
+        navigator.push(ProviderRoute.page("team-settings:$page") { body(page) })
     }
 }
 

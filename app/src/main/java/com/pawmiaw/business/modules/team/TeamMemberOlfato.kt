@@ -240,11 +240,11 @@ fun TeamMemberOlfatoCard(
         }
     }
 
-    // iOS pushes Settings › Olfato AI here (`NavigationLink { TeamOlfatoSettingsPage() }`);
-    // a page that isn't a route opens over this one.
-    if (seeingTeam) {
-        AppSheet(onDismissRequest = { seeingTeam = false }) {
-            Box(Modifier.sheetPresentation()) { TeamOlfatoSettingsPage() }
-        }
+    // iOS pushes Settings › Olfato AI here (`NavigationLink { TeamOlfatoSettingsPage() }`).
+    val nav = LocalNavigator.current
+    LaunchedEffect(seeingTeam) {
+        if (!seeingTeam) return@LaunchedEffect
+        seeingTeam = false
+        nav.push(ProviderRoute.page("team-olfato-use") { TeamOlfatoSettingsPage() })
     }
 }

@@ -184,38 +184,18 @@ sealed class ClientsPush {
 val LocalClientsPush = compositionLocalOf<((ClientsPush) -> Unit)?> { null }
 
 /**
- * iOS `.navigationDestination(item: $pushed) { push in push.view }`: the pushed page over this
- * one, sliding in from the side, its bar's back arrow (and the back gesture) returning here.
- * The routes are `ProviderRoute`s; these pages (a client's invitations, its account) are not.
+ * iOS `.navigationDestination(item: $pushed) { push in push.view }`: the page is pushed on the
+ * stack as any page (`ProviderRoute.page`), sliding in with its back arrow, and the trigger is
+ * cleared at once.
  */
 @Composable
 fun ClientsPushDestination(pushed: ClientsPush?, onBack: () -> Unit) {
-    // The page being shown, kept while it slides out after `pushed` is cleared.
-    val shown = remember { arrayOfNulls<ClientsPush>(1) }
-    if (pushed != null) shown[0] = pushed
     val navigator = LocalNavigator.current
-    val slot = LocalPageSlot.current
-    val depth = (if (slot.navigator === navigator) slot.depth else 0) + 1
-    BackHandler(enabled = pushed != null) { onBack() }
-    AnimatedVisibility(
-        visible = pushed != null,
-        enter = slideInHorizontally(tween(320, easing = FastOutSlowInEasing)) { it },
-        exit = slideOutHorizontally(tween(260, easing = FastOutSlowInEasing)) { it },
-    ) {
-        CompositionLocalProvider(
-            LocalIsPushedPage provides true,
-            LocalDismiss provides onBack,
-            LocalPageSlot provides PageSlot(navigator, depth),
-            LocalInSheet provides false,
-        ) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Theme.canvas)
-                    // A page sliding in takes the touches meant for the one under it.
-                    .pointerInput(Unit) {}
-            ) { shown[0]?.view() }
-        }
+    val clear by rememberUpdatedState(onBack)
+    LaunchedEffect(pushed) {
+        val push = pushed ?: return@LaunchedEffect
+        clear()
+        navigator.push(ProviderRoute.page("clients:$push") { push.view() })
     }
 }
 

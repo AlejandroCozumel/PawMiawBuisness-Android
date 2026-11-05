@@ -458,17 +458,11 @@ private fun SchedAgendaPage(filter: ScheduleFilter) {
         }
 
         // A session opens as its own page (iOS `.navigationDestination(item:)`; it has no route).
-        var shownSession by remember { mutableStateOf<String?>(null) }
-        LaunchedEffect(model.openedSession) { model.openedSession?.let { shownSession = it } }
-        AnimatedVisibility(
-            visible = model.openedSession != null,
-            enter = slideInHorizontally(tween(320)) { it },
-            exit = slideOutHorizontally(tween(260)) { it },
-        ) {
-            val id = model.openedSession ?: shownSession
-            if (id != null) {
-                SchedPushedPage(onBack = { model.openedSession = null }) { SvcSessionScreen(sessionId = id) }
-            }
+        val nav = LocalNavigator.current
+        LaunchedEffect(model.openedSession) {
+            val id = model.openedSession ?: return@LaunchedEffect
+            model.openedSession = null
+            nav.push(ProviderRoute.page("session:$id") { SvcSessionScreen(sessionId = id) })
         }
     }
 
@@ -510,23 +504,6 @@ private fun SchedAgendaPage(filter: ScheduleFilter) {
 }
 
 /** A page pushed over the Agenda that has no route of its own (a group session). */
-@Composable
-private fun SchedPushedPage(onBack: () -> Unit, content: @Composable () -> Unit) {
-    BackHandler { onBack() }
-    val slot = LocalPageSlot.current
-    CompositionLocalProvider(
-        LocalIsPushedPage provides true,
-        LocalDismiss provides onBack,
-        LocalPageSlot provides PageSlot(slot.navigator, slot.depth + 1),
-    ) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Theme.canvas)
-                .pointerInput(Unit) {}
-        ) { content() }
-    }
-}
 
 // MARK: Header and numbers
 

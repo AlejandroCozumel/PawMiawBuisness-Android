@@ -607,12 +607,12 @@ private fun TeamMemberOnlineCardBody(
         Text(summary, style = Theme.text(14, if (strong) FontWeight.SemiBold else FontWeight.Normal), color = if (strong) Theme.inkStrong else Theme.inkSoft)
     }
 
-    // iOS pushes Settings › Services here (`NavigationLink { TeamSettingsSectionScreen(section: "services") }`);
-    // a page that isn't a route opens over this one.
-    if (choosingServices) {
-        AppSheet(onDismissRequest = { choosingServices = false }) {
-            Box(Modifier.sheetPresentation()) { TeamSettingsSectionScreen(section = "services") }
-        }
+    // iOS pushes Settings › Services here (`NavigationLink { TeamSettingsSectionScreen(section: "services") }`).
+    val nav = LocalNavigator.current
+    LaunchedEffect(choosingServices) {
+        if (!choosingServices) return@LaunchedEffect
+        choosingServices = false
+        nav.push(ProviderRoute.page("team-settings:services") { TeamSettingsSectionScreen(section = "services") })
     }
 }
 
