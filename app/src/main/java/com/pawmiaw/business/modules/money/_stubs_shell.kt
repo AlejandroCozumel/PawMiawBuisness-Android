@@ -13,18 +13,6 @@ import com.pawmiaw.business.*
 //  each shows only its name.
 //
 
-// STUB: Modules/Money/SaleDetailScreen.swift
-@Composable
-fun SaleDetailScreen(saleId: String, modifier: Modifier = Modifier) = ShellStub("SaleDetailScreen", modifier)
-
-// STUB: Modules/Money/CashStoreCheckout.swift
-@Composable
-fun StoreCheckoutScreen(prefill: StorePrefill, modifier: Modifier = Modifier) = ShellStub("StoreCheckoutScreen", modifier)
-
-// STUB: Modules/Money/CatalogScreen.swift
-@Composable
-fun CatalogScreen(openItemId: String? = null, modifier: Modifier = Modifier) = ShellStub("CatalogScreen", modifier)
-
 // STUB: Modules/Money/FinanceScreen.swift
 @Composable
 fun FinanceScreen(modifier: Modifier = Modifier) = ShellStub("FinanceScreen", modifier)

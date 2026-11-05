@@ -625,11 +625,17 @@ fun CashCounter(
     }
     LaunchedEffect(m.client?.id) { m.loadAccount() }
     LaunchedEffect(Unit) { m.applyPrefill() }
-    // "Add … in the Catalog": the Catalog page; from a quick edit, the Catalog opened on that item.
+    // "Add … in the Catalog": the Catalog page; from a quick edit, the Catalog opened on that item
+    // (iOS `.navigationDestination(isPresented: $showCatalog) { CatalogScreen(openItemId:) }`).
     LaunchedEffect(m.showCatalog) {
-        if (m.showCatalog && m.catalogItemId == null) {
-            m.showCatalog = false
+        if (!m.showCatalog) return@LaunchedEffect
+        val itemId = m.catalogItemId
+        m.showCatalog = false
+        m.catalogItemId = null
+        if (itemId == null) {
             nav.push(ProviderRoute.section(ProviderSection.catalog))
+        } else {
+            nav.push(ProviderRoute.page("catalog:$itemId") { CatalogScreen(openItemId = itemId) })
         }
     }
 
@@ -652,12 +658,6 @@ fun CashCounter(
                 val index = m.products.indexOfFirst { it.catalogItemId == saved.catalogItemId }
                 if (index >= 0) m.products = m.products.toMutableList().also { it[index] = CashQuickEdit.apply(saved, it[index]) }
             }, onOpenCatalog = { m.catalogItemId = product.catalogItemId })
-        }
-    }
-    if (m.showCatalog && m.catalogItemId != null) {
-        // iOS pushes CatalogScreen(openItemId:); a route can't carry the item, so the Catalog opens as a page in a sheet.
-        AppSheet(onDismissRequest = { m.showCatalog = false; m.catalogItemId = null }) {
-            Box(Modifier.sheetPresentation(setOf(PresentationDetent.large))) { CatalogScreen(openItemId = m.catalogItemId) }
         }
     }
     if (m.picking) {
