@@ -13,14 +13,6 @@ import com.pawmiaw.business.*
 //  each shows only its name.
 //
 
-// STUB: Modules/Services/GroomingScreen.swift
-@Composable
-fun GroomingScreen(modifier: Modifier = Modifier) = ShellStub("GroomingScreen", modifier)
-
-// STUB: Modules/Services/GroupsScreen.swift
-@Composable
-fun GroupsScreen(modifier: Modifier = Modifier) = ShellStub("GroupsScreen", modifier)
-
 // STUB: Modules/Services/HomeVisitsScreen.swift
 @Composable
 fun HomeVisitsScreen(modifier: Modifier = Modifier) = ShellStub("HomeVisitsScreen", modifier)
