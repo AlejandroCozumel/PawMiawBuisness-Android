@@ -526,7 +526,7 @@ fun <T> HospOnChange(value: T, action: suspend (T) -> Unit) {
     }
 }
 
-/** Swift `dict["key"] = optional`: a nil value leaves the key out (only a literal keeps a nil). */
+/** Swift `dict["key"] = optional`: a nil value leaves the key out. Only for optional extras (a note, a reason); a field the person cleared is sent as null. */
 fun MutableMap<String, Any?>.hospSet(key: String, value: Any?) {
     if (value == null) remove(key) else this[key] = value
 }

@@ -64,17 +64,20 @@ fun HospPlacementSheet(model: HospDetailModel, detail: HospDetail, modifier: Mod
         }
     }
 
-    /** Only what changed (a cleared value leaves its key out, as the Swift dictionary does). */
+    /**
+     * Only what changed. A field cleared here is sent as null, which the server clears (as the
+     * web and iOS do); leaving the key out would keep the old value.
+     */
     fun patch(): MutableMap<String, Any?> {
         val out = mutableMapOf<String, Any?>()
-        if (roomId.value.nonEmpty != detail.room?.id) out.hospSet("roomId", roomId.value.nonEmpty)
-        if (cageLabel.value.nonEmpty != detail.cageLabel.nonEmpty) out.hospSet("cageLabel", cageLabel.value.nonEmpty)
-        if (attendingId.value.nonEmpty != detail.attending?.id) out.hospSet("attendingMemberId", attendingId.value.nonEmpty)
-        if ((reason.value.nonEmpty ?: "") != (detail.reason ?: "")) out.hospSet("reason", reason.value.nonEmpty)
-        if (priority.value != detail.triagePriority) out.hospSet("triagePriority", priority.value)
-        if (estimate.value != detail.estimateAmount) out.hospSet("estimateAmount", estimate.value)
+        if (roomId.value.nonEmpty != detail.room?.id) out["roomId"] = roomId.value.nonEmpty
+        if (cageLabel.value.nonEmpty != detail.cageLabel.nonEmpty) out["cageLabel"] = cageLabel.value.nonEmpty
+        if (attendingId.value.nonEmpty != detail.attending?.id) out["attendingMemberId"] = attendingId.value.nonEmpty
+        if ((reason.value.nonEmpty ?: "") != (detail.reason ?: "")) out["reason"] = reason.value.nonEmpty
+        if (priority.value != detail.triagePriority) out["triagePriority"] = priority.value
+        if (estimate.value != detail.estimateAmount) out["estimateAmount"] = estimate.value
         if ((deposit.value ?: 0) != (detail.depositAmount ?: 0)) out["depositAmount"] = deposit.value ?: 0
-        if (note.value.nonEmpty != detail.internalNote.nonEmpty) out.hospSet("internalNote", note.value.nonEmpty)
+        if (note.value.nonEmpty != detail.internalNote.nonEmpty) out["internalNote"] = note.value.nonEmpty
         return out
     }
 
