@@ -21,10 +21,6 @@ fun GroomingScreen(modifier: Modifier = Modifier) = ShellStub("GroomingScreen", 
 @Composable
 fun GroupsScreen(modifier: Modifier = Modifier) = ShellStub("GroupsScreen", modifier)
 
-// STUB: Modules/Services/HomeVisitsScreen.swift
-@Composable
-fun HomeVisitsScreen(modifier: Modifier = Modifier) = ShellStub("HomeVisitsScreen", modifier)
-
 @Composable
 private fun ShellStub(name: String, modifier: Modifier) {
     providerPage(name) { Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(name) } }
