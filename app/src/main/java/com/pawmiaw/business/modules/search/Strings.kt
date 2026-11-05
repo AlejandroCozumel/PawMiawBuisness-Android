@@ -1,0 +1,9 @@
+package com.pawmiaw.business.search
+
+import com.pawmiaw.business.LocalizationManager
+import com.pawmiaw.business.localized
+
+// The Search module's own table first (iOS reads Search.strings by #fileID), then the shared one.
+fun L(key: String): String = localized(key, "Search")
+fun LF(key: String, vararg arguments: Any?): String = LocalizationManager.format(L(key), arguments)
+fun LP(count: Int, one: String, other: String): String = LocalizationManager.format(L(if (count == 1) one else other), arrayOf(count))
