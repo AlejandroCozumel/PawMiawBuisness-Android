@@ -6,6 +6,7 @@ object GlyphNames {
     /** SF Symbol (without ".fill") → Lucide. */
     val sf: Map<String, String> = hashMapOf(
         "allergens" to "thermometer",
+        "apple.logo" to "apple",
         "alarm" to "alarm-clock",
         "app.badge" to "bell-dot",
         "archivebox" to "archive",

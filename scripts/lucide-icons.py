@@ -70,7 +70,7 @@ def swift_map(label):
     return re.findall(r'"([^"]+)":\s*"([^"]+)"', block)
 sf = swift_map('static let sf')
 # SF Symbols iOS draws itself (no Lucide twin in the iOS map): the closest Lucide icon.
-sf += [('allergens', 'thermometer')]
+sf += [('allergens', 'thermometer'), ('apple.logo', 'apple')]
 aliases = swift_map('static let aliases')
 
 def kstr(s): return '"' + s.replace('\\', '\\\\').replace('"', '\\"').replace('$', '\\$') + '"'
