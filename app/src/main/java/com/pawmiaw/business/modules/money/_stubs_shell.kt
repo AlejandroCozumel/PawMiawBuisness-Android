@@ -37,14 +37,6 @@ fun CatalogScreen(openItemId: String? = null, modifier: Modifier = Modifier) = S
 @Composable
 fun InvoicesScreen(modifier: Modifier = Modifier) = ShellStub("InvoicesScreen", modifier)
 
-// STUB: Modules/Money/FinanceScreen.swift
-@Composable
-fun FinanceScreen(modifier: Modifier = Modifier) = ShellStub("FinanceScreen", modifier)
-
-// STUB: Modules/Money/BillingScreen.swift
-@Composable
-fun BillingScreen(modifier: Modifier = Modifier) = ShellStub("BillingScreen", modifier)
-
 @Composable
 private fun ShellStub(name: String, modifier: Modifier) {
     providerPage(name) { Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(name) } }
