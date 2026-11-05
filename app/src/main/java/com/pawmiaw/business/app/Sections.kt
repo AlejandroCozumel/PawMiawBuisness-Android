@@ -296,4 +296,18 @@ sealed class ProviderRoute {
     data class newRecord(val prefill: RecordPrefill) : ProviderRoute()
     /** A new Olfato AI chat about one pet (the pet is the provider client pet id). */
     data class olfatoPetChat(val petId: String) : ProviderRoute()
+
+    /**
+     * A page iOS pushes with a plain `NavigationLink { SomeScreen(...) }` (no `ProviderRoute` of its
+     * own): a prescription, a client's account, a group session, a settings section. It slides in
+     * like any page, with the back arrow. [key] says which page it is ("rx:<id>"), so two pushes of
+     * the same page are equal.
+     *
+     *     nav.push(ProviderRoute.page("rx:$id") { StockPrescriptionScreen(prescriptionId = id) })
+     */
+    class page(val key: String, val content: @Composable () -> Unit) : ProviderRoute() {
+        override fun equals(other: Any?): Boolean = other is page && other.key == key
+        override fun hashCode(): Int = key.hashCode()
+        override fun toString(): String = "page($key)"
+    }
 }
