@@ -5,6 +5,7 @@ package com.pawmiaw.business
 object GlyphNames {
     /** SF Symbol (without ".fill") → Lucide. */
     val sf: Map<String, String> = hashMapOf(
+        "allergens" to "thermometer",
         "alarm" to "alarm-clock",
         "app.badge" to "bell-dot",
         "archivebox" to "archive",
