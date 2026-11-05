@@ -28,6 +28,7 @@ import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.ResponseBody.Companion.toResponseBody
 import okhttp3.Response
 import okhttp3.logging.HttpLoggingInterceptor
 import java.io.File
@@ -75,6 +76,8 @@ class APIError(
 
 /** What a screen shows after a failed action: the server's sentence when it refused, else the fallback. */
 fun errorText(error: Throwable, fallback: String = L("Something went wrong. Try again.")): String {
+    // A debug build says in the log what went wrong behind the sentence shown.
+    if (BuildConfig.DEBUG) android.util.Log.w("PawMiawError", "shown as an error: $error", error)
     if (error is APIError) {
         if (error.isOffline) return error.message
         if (error.message.isNotEmpty()) return error.message
@@ -125,8 +128,11 @@ object API {
 
     // MARK: Verbs
 
-    suspend inline fun <reified T> get(path: String, query: Map<String, String?> = emptyMap()): T =
-        decode(data("GET", path, query, null))
+    suspend inline fun <reified T> get(path: String, query: Map<String, String?> = emptyMap()): T {
+        val bytes = data("GET", path, query, null)
+        // A long list is read off the main thread.
+        return if (bytes.size > 16_384) kotlinx.coroutines.withContext(Dispatchers.Default) { decode<T>(bytes) } else decode(bytes)
+    }
 
     suspend inline fun <reified T> post(path: String, body: Map<String, Any?> = emptyMap(), query: Map<String, String?> = emptyMap()): T =
         decode(data("POST", path, query, jsonBody(body)))
@@ -232,7 +238,10 @@ object API {
         return bytes
     }
 
-    /** Runs a request, cancelled with the coroutine. Transport failures are `APIError.offline()`. */
+    /**
+     * Runs a request, cancelled with the coroutine. Transport failures are `APIError.offline()`.
+     * The answer comes back already read (its body buffered), so callers may read it on any thread.
+     */
     suspend fun execute(request: Request): Response = suspendCancellableCoroutine { continuation ->
         val call = client.newCall(request)
         continuation.invokeOnCancellation { call.cancel() }
@@ -241,7 +250,19 @@ object API {
                 if (continuation.isActive) continuation.resumeWithException(APIError.offline())
             }
             override fun onResponse(call: Call, response: Response) {
-                continuation.resume(response)
+                // The answer is read here, on OkHttp's thread: reading a body on the main thread is
+                // refused by Android (NetworkOnMainThreadException) once it is more than a few KB.
+                val buffered = try {
+                    response.use {
+                        val type = it.body?.contentType()
+                        val bytes = it.body?.bytes() ?: ByteArray(0)
+                        it.newBuilder().body(bytes.toResponseBody(type)).build()
+                    }
+                } catch (e: IOException) {
+                    if (continuation.isActive) continuation.resumeWithException(APIError.offline())
+                    return
+                }
+                continuation.resume(buffered)
             }
         })
     }

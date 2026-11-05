@@ -1,5 +1,11 @@
 package com.pawmiaw.business
 
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
+
+import androidx.compose.foundation.layout.navigationBars
+
+import androidx.compose.foundation.layout.WindowInsets
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -193,6 +199,9 @@ fun PageScroll(
                 verticalArrangement = Arrangement.spacedBy(spacing),
                 content = content,
             )
+            // iOS scrolls content clear of the home indicator: the last card ends above the
+            // navigation bar (gesture handle or buttons), not under it.
+            Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
         }
     }
 }
