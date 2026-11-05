@@ -17,18 +17,6 @@ import com.pawmiaw.business.*
 @Composable
 fun AppointmentDetailScreen(appointmentId: String, modifier: Modifier = Modifier) = ShellStub("AppointmentDetailScreen", modifier)
 
-// STUB: Modules/Schedule/SchedBookVisitScreen.swift
-@Composable
-fun BookVisitScreen(prefill: BookingPrefill, modifier: Modifier = Modifier) = ShellStub("BookVisitScreen", modifier)
-
-// STUB: Modules/Schedule/ScheduleScreen.swift
-@Composable
-fun ScheduleScreen(filter: ScheduleFilter = ScheduleFilter(), modifier: Modifier = Modifier) = ShellStub("ScheduleScreen", modifier)
-
-// STUB: Modules/Schedule/AppointmentsListScreen.swift
-@Composable
-fun AppointmentsListScreen(modifier: Modifier = Modifier) = ShellStub("AppointmentsListScreen", modifier)
-
 @Composable
 private fun ShellStub(name: String, modifier: Modifier) {
     providerPage(name) { Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(name) } }
