@@ -812,8 +812,11 @@ fun SchedVisitPrescriptions(appointment: SchedAppointment, modifier: Modifier = 
     val scope = rememberCoroutineScope()
     var items by remember { mutableStateOf<List<StockPrescription>?>(null) }
     var writing by remember { mutableStateOf(false) }
-    // The prescription's page (iOS `navigationDestination(item:)`; no route opens one, so it opens as a page in a sheet).
-    var opened by remember { mutableStateOf<String?>(null) }
+    // The prescription's page (iOS `navigationDestination(item:)`), pushed as a page.
+    val nav = LocalNavigator.current
+    fun open(id: String) {
+        nav.push(ProviderRoute.page("rx:$id") { StockPrescriptionScreen(prescriptionId = id) })
+    }
 
     val rights = StockRxRights(Workspace.shared)
 
@@ -841,7 +844,7 @@ fun SchedVisitPrescriptions(appointment: SchedAppointment, modifier: Modifier = 
                         if (rights.canWrite) PMButton(L("Prescribe"), systemImage = "plus", size = ButtonSize.compact) { writing = true }
                     }
                     list.forEach { prescription ->
-                        Box(Modifier.plainButton { opened = prescription.id }) { StockPrescriptionRow(prescription = prescription) }
+                        Box(Modifier.plainButton { open(prescription.id) }) { StockPrescriptionRow(prescription = prescription) }
                     }
                 } else {
                     LoadingState()
@@ -861,15 +864,10 @@ fun SchedVisitPrescriptions(appointment: SchedAppointment, modifier: Modifier = 
                     scope.launch {
                         load()
                         delay(450)
-                        opened = saved.id
+                        open(saved.id)
                     }
                 },
             )
-        }
-    }
-    opened?.let { id ->
-        AppSheet(onDismissRequest = { opened = null }) {
-            Box(Modifier.sheetPresentation(setOf(PresentationDetent.large))) { StockPrescriptionScreen(prescriptionId = id) }
         }
     }
 }

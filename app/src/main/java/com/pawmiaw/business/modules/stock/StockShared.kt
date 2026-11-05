@@ -416,8 +416,8 @@ fun StockDayControl(
     day: MutableState<String>,
     invalid: Boolean = false,
     placeholder: String = L("Choose the date"),
-    onChange: () -> Unit = {},
     modifier: Modifier = Modifier,
+    onChange: () -> Unit = {},
 ) {
     val utc = ZoneOffset.UTC
     FieldChrome(invalid = invalid, modifier = modifier) {

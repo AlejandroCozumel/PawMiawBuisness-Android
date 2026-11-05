@@ -58,8 +58,13 @@ fun ClientsPrescriptionsCard(chart: ClientsChart, modifier: Modifier = Modifier)
     var items by remember { mutableStateOf<List<StockPrescription>?>(null) }
     var failed by remember { mutableStateOf(false) }
     var writing by remember { mutableStateOf(false) }
-    var opened by remember { mutableStateOf<StockRxTarget?>(null) }
     val scope = rememberCoroutineScope()
+    val nav = LocalNavigator.current
+    /** The prescription's own page (iOS `NavigationLink` / `.navigationDestination(item:)`), pushed. */
+    fun open(target: StockRxTarget) {
+        val id = target.id
+        nav.push(ProviderRoute.page("rx:$id") { StockPrescriptionScreen(prescriptionId = id) })
+    }
 
     suspend fun load() {
         try {
@@ -100,7 +105,7 @@ fun ClientsPrescriptionsCard(chart: ClientsChart, modifier: Modifier = Modifier)
                     )
                 } else {
                     list.forEach { prescription ->
-                        Box(Modifier.plainButton { opened = StockRxTarget(id = prescription.id) }) { PrescriptionRow(prescription) }
+                        Box(Modifier.plainButton { open(StockRxTarget(id = prescription.id)) }) { PrescriptionRow(prescription) }
                     }
                 }
             } else if (failed) {
@@ -120,13 +125,9 @@ fun ClientsPrescriptionsCard(chart: ClientsChart, modifier: Modifier = Modifier)
                 draft = null,
             ) { saved ->
                 scope.launch { load() }
-                opened = StockRxTarget(id = saved.id)
+                open(StockRxTarget(id = saved.id))
             }
         }
-    }
-    // NavigationLink { StockPrescriptionScreen } / .navigationDestination(item:): not a route here.
-    opened?.let { target ->
-        ClientsChartPushedPage(onDismissRequest = { opened = null }) { StockPrescriptionScreen(prescriptionId = target.id) }
     }
 }
 
