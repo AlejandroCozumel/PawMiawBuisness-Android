@@ -13,10 +13,6 @@ import com.pawmiaw.business.*
 //  each shows only its name.
 //
 
-// STUB: Modules/Stock/StockInventory.swift
-@Composable
-fun InventoryScreen(modifier: Modifier = Modifier) = ShellStub("InventoryScreen", modifier)
-
 // STUB: Modules/Stock/StockPharmacy.swift
 @Composable
 fun PharmacyScreen(modifier: Modifier = Modifier) = ShellStub("PharmacyScreen", modifier)

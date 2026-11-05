@@ -9,16 +9,6 @@ import com.pawmiaw.business.*
 //  Deleted at merge.
 //
 
-// STUB: Modules/Stock/StockPrescriptionForm.swift
-data class StockRxPet(
-    val clientId: String,
-    val petId: String,
-    val petName: String,
-    val species: String? = null,
-    val photoUrl: String? = null,
-    val clientName: String? = null,
-)
-
 // STUB: Modules/Stock/StockPharmacy.swift
 data class StockRxTarget(val id: String)
 
@@ -38,16 +28,3 @@ object StockRxWords {
 @Composable
 fun StockControlledChip(label: String? = null, modifier: Modifier = Modifier) {}
 
-// STUB: Modules/Stock/StockPrescriptionSheet.swift
-@Composable
-fun StockPrescriptionSheet(
-    pet: StockRxPet?,
-    draft: StockPrescription?,
-    appointmentId: String? = null,
-    modifier: Modifier = Modifier,
-    onDone: (StockPrescription) -> Unit,
-) {}
-
-// STUB: Modules/Stock/StockPrescriptionDetail.swift
-@Composable
-fun StockPrescriptionScreen(prescriptionId: String, modifier: Modifier = Modifier) {}
