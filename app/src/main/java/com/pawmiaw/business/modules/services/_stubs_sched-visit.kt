@@ -17,9 +17,6 @@ fun SvcReportText.missing(category: String?, report: SvcReport?): List<String> =
 @Suppress("UnusedReceiverParameter", "UNUSED_PARAMETER")
 fun SvcReportText.fieldsText(fields: List<String>): String = TODO("STUB: SvcCommon.swift")
 
-// STUB: Modules/Services/SvcCommon.swift
-@Suppress("UnusedReceiverParameter", "UNUSED_PARAMETER")
-fun SvcReportText.title(kind: String, category: String?): String = TODO("STUB: SvcCommon.swift")
 
 // STUB: Modules/Services/SvcCommon.swift
 @Suppress("UnusedReceiverParameter")
@@ -29,17 +26,6 @@ val SvcReportText.groomServices: List<String> get() = TODO("STUB: SvcCommon.swif
 @Suppress("UnusedReceiverParameter")
 val SvcReportText.styles: List<String> get() = TODO("STUB: SvcCommon.swift")
 
-// STUB: Modules/Services/GroomingTabs.swift
-@Composable
-fun SvcCareCard(
-    petId: String,
-    petName: String,
-    canEdit: Boolean,
-    grooming: Boolean = true,
-    photoURL: String? = null,
-    species: String? = null,
-    modifier: Modifier = Modifier,
-) {}
 
 // STUB: Modules/Services/SvcVisitSheets.swift (`wanted:` left out: SvcGroomWanted isn't ported yet)
 @Composable
