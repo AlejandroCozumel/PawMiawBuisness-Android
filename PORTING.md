@@ -133,3 +133,20 @@ keep their position and get the name used inside the Swift body.
 - Don't edit files you don't own. Missing icon names: `Glyph` draws a dashed circle; list them in
   your report instead of editing `GlyphNames.kt`.
 - No secrets, no keys, no real credentials anywhere.
+
+## Status (2026-11-05)
+
+Everything in the iOS business app (PawMiawBuisness-iOS 74221cd, plus that working tree's online-booking
+reschedule asks) is ported: core, workspace, the whole design kit, the shell, sign-in, and all 13 modules.
+No stand-ins (`_stubs_*.kt`) are left. Checked on the emulator against the local backend: every section
+opens with its content (phone and tablet, English and Spanish, light and dark), pushed pages and the back
+gesture, the booking sheet (steps, folding client picker, two-button footer), the discard question.
+
+Known differences on purpose (platform): Google Maps first in map links; Material date/time pickers inside
+the app's sheet; CameraX + ML Kit for barcodes; Canvas charts where iOS uses Swift Charts.
+
+Known gaps to look at next:
+- ⌘K opens search on iOS with a keyboard; not on Android.
+- The soft keyboard's search key doesn't submit `SearchField` (no submit hook in the kit yet).
+- `ChoiceCards` / `Segmented` don't dim inside `Disabled { }` (callers block the change instead).
+- `EdgeRow` centres its time column on a phone; iOS aligns it to the row's first line.
