@@ -62,25 +62,7 @@ fun SvcStartGateSheet(request: SvcStartGateRequest, onDone: () -> Unit, modifier
 // STUB: Modules/Services/SvcCommon.swift
 fun svcIsStartGate(error: Throwable): String? = null
 
-// STUB: Modules/Services/SvcVisitSheets.swift
-data class SvcFinishTarget(
-    val id: String,
-    val petName: String,
-    val serviceLabel: String,
-    val serviceCategory: String?,
-    val reportMissing: List<String> = emptyList(),
-)
 
-// STUB: Modules/Services/SvcVisitSheets.swift
-@Composable
-fun SvcFinishSheet(
-    target: SvcFinishTarget,
-    extraBody: Map<String, Any?> = emptyMap(),
-    onOpenReport: (() -> Unit)? = null,
-    onOpenVisit: (() -> Unit)? = null,
-    onFinished: () -> Unit,
-    modifier: Modifier = Modifier,
-) {}
 
 // STUB: Modules/Services/SvcVisitSheets.swift
 data class SvcReportPet(val id: String, val name: String)

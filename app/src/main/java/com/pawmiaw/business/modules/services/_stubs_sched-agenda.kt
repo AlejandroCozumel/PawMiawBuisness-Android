@@ -5,9 +5,6 @@ import androidx.compose.ui.Modifier
 
 // Stand-ins for the Services symbols the Agenda opens; deleted at merge.
 
-// STUB: Modules/Services/GroupsSession.swift
-@Composable
-fun SvcSessionScreen(sessionId: String, modifier: Modifier = Modifier) {}
 
 // STUB: Modules/Services/GroupsSession.swift
 @Composable

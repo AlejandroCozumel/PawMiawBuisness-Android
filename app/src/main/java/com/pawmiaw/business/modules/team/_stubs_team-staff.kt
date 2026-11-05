@@ -20,6 +20,7 @@ fun TeamOlfatoSettingsPage(modifier: Modifier = Modifier) {}
 
 // STUB: Modules/Team/TeamHours.swift
 object TeamHours {
+    fun zoneLabel(identifier: String): String = TODO()
     fun ranges(day: TeamDay?): List<TeamTimeRange> = TODO()
     fun ordered(schedule: List<TeamDay>): List<TeamDay> = TODO()
     fun body(schedule: List<TeamDay>): List<Map<String, Any?>> = TODO()
