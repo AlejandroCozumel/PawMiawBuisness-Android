@@ -19,15 +19,3 @@ fun SvcReportText.title(kind: String, category: String?): String = TODO("STUB: S
 // STUB: Modules/Services/SvcCommon.swift
 @Composable
 fun SvcReportView(report: SvcReport, compact: Boolean = false, modifier: Modifier = Modifier) {}
-
-// STUB: Modules/Services/GroomingTabs.swift
-@Composable
-fun SvcCareCard(
-    petId: String,
-    petName: String,
-    canEdit: Boolean,
-    grooming: Boolean = true,
-    photoURL: String? = null,
-    species: String? = null,
-    modifier: Modifier = Modifier,
-) {}
