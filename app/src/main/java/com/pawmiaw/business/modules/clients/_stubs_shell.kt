@@ -13,10 +13,6 @@ import com.pawmiaw.business.*
 //  each shows only its name.
 //
 
-// STUB: Modules/Clients/ClientDetailScreen.swift
-@Composable
-fun ClientDetailScreen(clientId: String, modifier: Modifier = Modifier) = ShellStub("ClientDetailScreen", modifier)
-
 // STUB: Modules/Clients/PatientChartScreen.swift
 @Composable
 fun ClientPetScreen(clientId: String, petId: String, modifier: Modifier = Modifier) = ShellStub("ClientPetScreen", modifier)
@@ -24,14 +20,6 @@ fun ClientPetScreen(clientId: String, petId: String, modifier: Modifier = Modifi
 // STUB: Modules/Clients/PatientChartScreen.swift
 @Composable
 fun PatientChartScreen(petId: String, modifier: Modifier = Modifier) = ShellStub("PatientChartScreen", modifier)
-
-// STUB: Modules/Clients/ClientsListScreen.swift
-@Composable
-fun ClientsScreen(modifier: Modifier = Modifier) = ShellStub("ClientsScreen", modifier)
-
-// STUB: Modules/Clients/ClientsListScreen.swift
-@Composable
-fun PatientsScreen(modifier: Modifier = Modifier) = ShellStub("PatientsScreen", modifier)
 
 // STUB: Modules/Clients/DueScreen.swift
 @Composable
