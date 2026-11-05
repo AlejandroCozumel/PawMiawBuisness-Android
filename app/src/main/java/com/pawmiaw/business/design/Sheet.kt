@@ -78,6 +78,8 @@ class AppSheetController internal constructor() {
     var dismissDisabled by mutableStateOf(false)
     var background by mutableStateOf<Color?>(null)
     var cornerRadius by mutableStateOf<Dp?>(null)
+    /** `.presentationDragIndicator(.hidden)`: the content draws its own handle (ProviderModal's header). */
+    var dragIndicatorHidden by mutableStateOf(false)
     /** `.presentationDetents([.medium, .large])` on a phone: opens at half and pulls up to the whole. */
     var twoHeights by mutableStateOf(false)
         internal set
@@ -116,6 +118,13 @@ fun InteractiveDismissDisabled(disabled: Boolean = true) {
 fun PresentationBackground(color: Color) {
     val sheet = LocalAppSheet.current ?: return
     SideEffect { sheet.background = color }
+}
+
+/** SwiftUI `.presentationDragIndicator(_:)`, from inside a sheet's content. */
+@Composable
+fun PresentationDragIndicator(visible: Boolean) {
+    val sheet = LocalAppSheet.current ?: return
+    SideEffect { sheet.dragIndicatorHidden = !visible }
 }
 
 /**
@@ -253,7 +262,7 @@ fun AppSheet(
                     .then(if (card) Modifier.clip(RoundedCornerShape(radius)).background(ground) else Modifier)
             ) {
                 Column(Modifier.fillMaxWidth(), content = content)
-                if (dragIndicator && !card) {
+                if (dragIndicator && !card && !controller.dragIndicatorHidden) {
                     // iOS `.presentationDragIndicator(.visible)`: 36×5, 5 from the top.
                     Box(
                         Modifier

@@ -936,7 +936,7 @@ fun PlacesIconBadge(
     modifier: Modifier = Modifier,
 ) {
     IconBadge(
-        icon = systemImage, accent = tone ?: hue.color, size = size, iconSize = size * 0.45f, ink = IconBadgeInk.strong, washPercent = washPercent,
+        icon = systemImage, accent = tone ?: hue.color, size = size, iconSize = size * 0.45f, ink = IconBadge.Ink.strong, washPercent = washPercent,
         modifier = modifier.grayscale(muted),
     )
 }

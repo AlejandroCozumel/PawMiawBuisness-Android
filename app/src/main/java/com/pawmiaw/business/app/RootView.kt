@@ -80,12 +80,12 @@ fun PawMiawNegociosApp() {
     CompositionLocalProvider(LocalIsDark provides dark) {
         // iOS `.tint(Theme.blue)`: the system controls (spinners, selection, the cursor) in PAW Blue.
         MaterialTheme(colorScheme = brandColorScheme(dark)) {
-            Box(Modifier.fillMaxSize().background(Theme.canvas)) {
+            // The toast banner sits over everything (Toast.kt).
+            Box(Modifier.fillMaxSize().background(Theme.canvas).toastHost()) {
                 // iOS `.id(localization.currentLanguage)`: a new language redraws every screen.
                 key(LocalizationManager.currentLanguage) {
                     RootView()
                 }
-                ToastHost()
             }
         }
     }

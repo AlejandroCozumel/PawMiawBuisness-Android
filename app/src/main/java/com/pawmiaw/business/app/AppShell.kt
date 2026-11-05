@@ -438,24 +438,25 @@ private fun SidebarAccountRow(choose: (ProviderSection) -> Unit, modifier: Modif
         modifier = modifier,
         content = {
             if (user != null) {
-                section(user.email) {
-                    item(L("Your account"), icon = "user-round") { choose(ProviderSection.accountSecurity) }
-                    item(L("Notification settings"), icon = "bell-ring") { choose(ProviderSection.notificationSettings) }
-                }
+                section(user.email)
+                item(L("Your account"), icon = "user-round") { choose(ProviderSection.accountSecurity) }
+                item(L("Notification settings"), icon = "bell-ring") { choose(ProviderSection.notificationSettings) }
+                divider()
             }
+            // iOS `.pickerStyle(.menu)`: a submenu with the choices.
             picker(
                 title = L("Theme"),
                 icon = if (theme == "dark") "moon" else "sun",
                 options = listOf("light" to L("Light"), "dark" to L("Dark")),
-                selection = theme,
-                onSelect = { ThemeChoice.set(it) },
+                selection = stateOf({ ThemeChoice.theme }, { ThemeChoice.set(it) }),
+                inline = false,
             )
             picker(
                 title = L("Language"),
                 icon = "languages",
                 options = AppLanguage.entries.map { it to it.displayName },
-                selection = LocalizationManager.currentLanguage,
-                onSelect = { LocalizationManager.setLanguage(it) },
+                selection = stateOf({ LocalizationManager.currentLanguage }, { LocalizationManager.setLanguage(it) }),
+                inline = false,
             )
             item(L("Sign out"), icon = "log-out", destructive = true) { confirmSignOut = true }
         },

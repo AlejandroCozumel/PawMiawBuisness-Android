@@ -310,7 +310,9 @@ fun ProviderModal(
             .fillMaxWidth()
             .background(Theme.surface),
     ) {
-        ModalHeader(title, subtitle, systemImage, accent, steps, pebbleImageURL, asPage, drawsHandle = sheet == null || inCard)
+        // The header draws the iOS handle (41.6×4.8, ink 22%) in place of the sheet's generic one.
+        PresentationDragIndicator(false)
+        ModalHeader(title, subtitle, systemImage, accent, steps, pebbleImageURL, asPage, drawsHandle = true)
         if (body != null) {
             Column(
                 Modifier
@@ -392,8 +394,7 @@ private fun ModalHeader(
             // On a page the tint runs under the status bar; the words stay below it.
             .then(if (asPage) Modifier.windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top)) else Modifier),
     ) {
-        // A sheet opened as a page can't be pulled away: no handle. Inside a phone's AppSheet the
-        // sheet draws its own indicator over this place, so only the room for it is kept here.
+        // A sheet opened as a page can't be pulled away: no handle.
         if (!asPage) {
             Box(Modifier.fillMaxWidth().padding(top = 8.dp).height(4.8.dp), contentAlignment = Alignment.Center) {
                 if (drawsHandle) Box(Modifier.size(41.6.dp, 4.8.dp).background(Theme.inkStrong.copy(alpha = 0.22f), CapsuleShape))

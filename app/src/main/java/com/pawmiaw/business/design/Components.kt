@@ -963,7 +963,7 @@ fun EmptyState(
 }
 
 @Composable
-fun ErrorState(message: String, retry: (suspend () -> Unit)? = null, modifier: Modifier = Modifier) {
+fun ErrorState(message: String, modifier: Modifier = Modifier, retry: (suspend () -> Unit)? = null) {
     val scope = rememberCoroutineScope()
     Column(
         modifier.fillMaxWidth().padding(24.dp),
