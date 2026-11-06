@@ -920,4 +920,6 @@ data class SvcMissedTarget(
     val subtitle: String,
     /** "no_show" or "cancel". */
     val mode: String,
+    /** When the visit starts: how far ahead the family asked to cancel. */
+    val startsAt: String? = null,
 )

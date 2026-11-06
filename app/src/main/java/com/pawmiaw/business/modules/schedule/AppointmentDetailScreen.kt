@@ -22,6 +22,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pawmiaw.business.*
+import com.pawmiaw.business.money.CashBillRules
+import com.pawmiaw.business.money.CashForgiveBillSheet
 import com.pawmiaw.business.services.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -63,12 +65,15 @@ private sealed class SchedVisitSheet {
     data class gate(val prompt: SchedGatePrompt) : SchedVisitSheet()
     data class admit(val preset: SchedAdmitPreset) : SchedVisitSheet()
     data class deposit(val due: SchedDepositDue) : SchedVisitSheet()
+    /** "Perdonar el cargo": the fee bill of a no-show the family disputes (docs/family-money.md §5). */
+    data class forgiveFee(val invoiceId: String) : SchedVisitSheet()
 
     val id: String
         get() = when (this) {
             is gate -> "gate-${prompt.id}"
             is admit -> "admit-${preset.id}"
             is deposit -> "deposit"
+            is forgiveFee -> "forgive-$invoiceId"
             calendar -> "calendar"
             edit -> "edit"
             checkIn -> "checkIn"
@@ -157,6 +162,9 @@ fun AppointmentDetailScreen(appointmentId: String, modifier: Modifier = Modifier
     var simpleStages by remember { mutableStateOf(false) }
     var reportMissing by remember { mutableStateOf<List<String>?>(null) }
     var hospStays by remember { mutableStateOf<List<SchedHospStay>>(emptyList()) }
+    // A disputed no-show's fee bill ("Sí fuimos", docs/family-money.md §5): "Perdonar el cargo" only while something is left on it.
+    var disputedFee by remember { mutableStateOf<SchedInvoice?>(null) }
+    var dismissing by remember { mutableStateOf(false) }
 
     // MARK: Loading
 
@@ -178,6 +186,11 @@ fun AppointmentDetailScreen(appointmentId: String, modifier: Modifier = Modifier
             }
             loadError = null
             val loaded = appointment
+            val feeId = loaded?.feeInvoiceId
+            disputedFee = if (
+                loaded != null && feeId != null && workspace.can(Permission.billingWaiveVisit) && loaded.status == "no_show" &&
+                loaded.disputedAt != null && loaded.feeDecision == "charged"
+            ) orNull { API.get<SchedInvoice>("/provider-invoices/$feeId") } else null
             if (loaded?.serviceCategory == "groomer" && loaded.groomStage != null) {
                 val settings = orNull { API.get<SchedGroomSettings>("/provider-grooming/settings") }
                 simpleStages = settings?.simpleStages ?: false
@@ -280,6 +293,25 @@ fun AppointmentDetailScreen(appointmentId: String, modifier: Modifier = Modifier
                 Toast.error(e)
             } finally {
                 busy = false
+            }
+        }
+    }
+
+    /** "Descartar" a family's "Sí fuimos": off Home's "Te necesita"; the answer stays on the visit. */
+    fun dismissDispute(a: SchedAppointment) {
+        dismissing = true
+        scope.launch {
+            try {
+                API.send("POST", "/provider-appointments/${a.id}/dispute/dismiss", emptyMap())
+                Toast.show(L("Dismissed. Their answer stays on the visit."))
+                announceDataChanged()
+                load()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Toast.error(if ((e as? APIError)?.code == "no_dispute") L("The family has not answered this visit") else errorText(e))
+            } finally {
+                dismissing = false
             }
         }
     }
@@ -412,6 +444,7 @@ fun AppointmentDetailScreen(appointmentId: String, modifier: Modifier = Modifier
                     SchedBillStage.noBill -> SchedClosingCheck(id = "bill", label = L("Bill"), value = L("No bill yet"), state = SchedClosingCheck.State.pending)
                     SchedBillStage.noCharge -> SchedClosingCheck(id = "bill", label = L("Bill"), value = L("No charge"), state = SchedClosingCheck.State.ok)
                     SchedBillStage.paid, SchedBillStage.covered -> SchedClosingCheck(id = "bill", label = L("Bill"), value = L("Paid"), state = SchedClosingCheck.State.ok)
+                    SchedBillStage.forgiven -> SchedClosingCheck(id = "bill", label = L("Bill"), value = L("Balance forgiven"), state = SchedClosingCheck.State.ok)
                     else -> SchedClosingCheck(
                         id = "bill", label = L("Bill"),
                         value = Money.format(if (f.stage == SchedBillStage.building) invoice?.totalAmount else f.collectAmount, currency),
@@ -535,6 +568,10 @@ fun AppointmentDetailScreen(appointmentId: String, modifier: Modifier = Modifier
                 when (f.stage) {
                     SchedBillStage.paid -> SchedJourneyStep(id = "pay", label = L("Payment"), value = L("Paid"), extra = invoice?.let { Money.format(it.totalAmount, currency) }, state = SchedJourneyStep.State.done, systemImage = coin)
                     SchedBillStage.covered -> SchedJourneyStep(id = "pay", label = L("Payment"), value = L("Nothing to charge"), state = SchedJourneyStep.State.done, systemImage = coin)
+                    SchedBillStage.forgiven -> SchedJourneyStep(
+                        id = "pay", label = L("Payment"), value = L("Balance forgiven"),
+                        extra = invoice?.forgivenAmount?.takeIf { it > 0 }?.let { Money.format(it, currency) }, state = SchedJourneyStep.State.done, systemImage = coin,
+                    )
                     SchedBillStage.noCharge -> SchedJourneyStep(id = "pay", label = L("Payment"), value = L("No charge"), state = SchedJourneyStep.State.done, systemImage = coin)
                     SchedBillStage.ready, SchedBillStage.partPaid -> SchedJourneyStep(id = "pay", label = L("Payment"), value = Money.format(f.collectAmount, currency), extra = L("To pay"), state = SchedJourneyStep.State.attention, systemImage = coin)
                     SchedBillStage.building -> SchedJourneyStep(
@@ -686,6 +723,13 @@ fun AppointmentDetailScreen(appointmentId: String, modifier: Modifier = Modifier
                 onEdit = if (f.edit) ({ sheet = SchedVisitSheet.edit }) else null,
                 onCancel = if (f.cancel) ({ sheet = SchedVisitSheet.cancel }) else null,
                 onKeep = if (f.edit) ({ keepAsBooked(a) }) else null,
+                // The fee charged for the no-show the family disputes: forgiven from here (its bill decides whether anything is left).
+                onForgiveFee = disputedFee?.takeIf {
+                    workspace.can(Permission.billingWaiveVisit) && a.feeInvoiceId == it.id &&
+                        CashBillRules.forgiveBlocker(it.status, it.balanceDueAmount ?: 0, kind = "fee") == null
+                }?.let { fee -> { sheet = SchedVisitSheet.forgiveFee(fee.id) } },
+                onDismissDispute = if ((f.edit || workspace.can(Permission.billingWaiveVisit)) && a.disputeDismissedAt == null) ({ dismissDispute(a) }) else null,
+                dismissing = dismissing,
             )
         }
     }
@@ -945,6 +989,7 @@ fun AppointmentDetailScreen(appointmentId: String, modifier: Modifier = Modifier
                     nav.push(ProviderRoute.hospitalization(id))
                 }
             }
+            is SchedVisitSheet.forgiveFee -> CashForgiveBillSheet(invoiceId = item.invoiceId) { scope.launch { load() } }
             is SchedVisitSheet.deposit -> DepositSheet(
                 clientId = a.providerClientId, clientName = a.clientName, appointmentId = a.id, owed = item.due.owed, currency = item.due.currency,
                 label = LF("Emergency deposit · %@", a.petName), explanation = L("It stays as credit on their account and is used when they pay the visit."),

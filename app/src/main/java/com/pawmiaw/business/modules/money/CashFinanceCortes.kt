@@ -96,7 +96,8 @@ object CashFinanceCortes {
     val groups: List<Pair<String, String>>
         get() = listOf(
             "refund" to L("Refunds"), "credit_note" to L("Credit notes"), "return" to L("Returns"), "refund_other_method" to L("Refunded another way than paid"),
-            "cancel" to L("Cancellations"), "discount" to L("Discounts"), "courtesy" to L("Courtesies"), "price_lowered" to L("Lower prices"),
+            // "Saldo perdonado": what was left on a bill, forgiven by the business; each row opens the bill.
+            "cancel" to L("Cancellations"), "forgiven" to L("Balances forgiven"), "discount" to L("Discounts"), "courtesy" to L("Courtesies"), "price_lowered" to L("Lower prices"),
             "no_charge" to L("Visits without charge"), "stay_no_bill" to L("Check-outs without a bill"), "cash_in" to L("Cash in"), "cash_out" to L("Cash out"),
             "cash_difference" to L("Drawer differences"), "backdated_payment" to L("Backdated payments"),
         )
@@ -610,7 +611,7 @@ private fun CortesExceptions(exceptions: CashExceptions?, exceptionsError: Strin
     if (exceptions != null) {
         val present = CashFinanceCortes.groups.mapNotNull { group ->
             val items = exceptions.items.filter { it.kind == group.first }
-            if (items.isEmpty()) null else group.second to items
+            if (items.isEmpty()) null else Triple(group.second, items, maxOf(exceptions.counts?.get(group.first) ?: 0, items.size))
         }
         CortesPanel(L("Exceptions of the day"), icon = "triangle-alert", aside = {
             if (exceptions.withoutReason > 0) {
@@ -626,9 +627,9 @@ private fun CortesExceptions(exceptions: CashExceptions?, exceptionsError: Strin
                         style = Theme.text(12),
                         color = Theme.inkSoft,
                     )
-                    for ((title, items) in present) {
+                    for ((title, items, count) in present) {
                         key(title) {
-                            CashExceptionGroup(title = title, items = items, currency = exceptions.currency, day = exceptions.day, zone = cortesZone(exceptions.timeZone), onShift = onShift)
+                            CashExceptionGroup(title = title, count = count, items = items, currency = exceptions.currency, day = exceptions.day, zone = cortesZone(exceptions.timeZone), onShift = onShift)
                         }
                     }
                 }
@@ -666,10 +667,19 @@ private fun CashFinCorteStat(icon: String, accent: androidx.compose.ui.graphics.
 
 /** One kind of exception: its first rows, then "Ver N más". */
 @Composable
-private fun CashExceptionGroup(title: String, items: List<CashException>, currency: String, day: String, zone: ZoneId?, onShift: (String) -> Unit) {
+private fun CashExceptionGroup(
+    title: String,
+    /** The server's count for the kind (`counts`), never below the rows shown. */
+    count: Int,
+    items: List<CashException>,
+    currency: String,
+    day: String,
+    zone: ZoneId?,
+    onShift: (String) -> Unit,
+) {
     var all by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("$title · ${items.size}".uppercase(), style = brandText(10.6, FontWeight.ExtraBold).tracking(1.27), color = Theme.inkSoft)
+        Text("$title · $count".uppercase(), style = brandText(10.6, FontWeight.ExtraBold).tracking(1.27), color = Theme.inkSoft)
         Column(Modifier.fillMaxWidth()) {
             (if (all) items else items.take(5)).forEachIndexed { index, item ->
                 if (index > 0) RowDivider()

@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -842,14 +844,22 @@ fun SchedMissedSheet(appointment: SchedAppointment, mode: String, modifier: Modi
         appointmentId = appointment.id, petName = appointment.petName, clientName = appointment.clientName,
         subtitle = "${appointment.serviceLabel} · $time · ${appointment.clientName}", mode = mode,
         together = appointment.togetherPets.mapNotNull { it.name },
+        startsAt = appointment.startsAt,
         modifier = modifier,
     )
 }
 
 /**
  * "Didn't come" and cancelling — a visit, or a pet taken out of a session — with the reason and the
- * fee when the server asks for a decision; a family's other pets booked with it go too unless only
- * this one is chosen. The visit page, Home and Paseos y clases use it.
+ * fee; a family's other pets booked with it go too unless only this one is chosen. The visit page,
+ * Home and Paseos y clases use it: the one sheet every visit is cancelled from.
+ *
+ * Cancelling asks "¿Quién cancela?" first (web visit-sheets.tsx `VisitMissedSheet`, lib/visit-cancel.ts;
+ * docs/family-money.md §5 in paw-miaw-backend), read from the cancel preview when the sheet opens:
+ * La familia (preset when the family asked to cancel, with when it asked) is offered the
+ * late-cancellation fee when it applies, charged to their account or waived with a reason, and says
+ * how far ahead they asked; Nosotros never takes a fee and is never asked about one. An older server
+ * (no preview) keeps the sheet as it was: the fee comes from its 409 `fee_decision_required`.
  */
 @Composable
 fun SchedMissedSheet(
@@ -863,28 +873,74 @@ fun SchedMissedSheet(
     together: List<String> = emptyList(),
     /** The toast once cancelled ("Visit cancelled.", or a session's "Taken out. The place is open."). */
     cancelledText: String = L("Visit cancelled."),
+    /** When the visit starts: "Pidió con 5 h de anticipación". */
+    startsAt: String? = null,
     onDone: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val dismiss = LocalDismiss.current
     val scope = rememberCoroutineScope()
     val form = remember { FormState() }
+    val cancelling = mode == "cancel"
     val reason = remember { mutableStateOf("") }
-    var fee by remember { mutableStateOf<SchedFeeRequired?>(null) }
+    // The fee the server asked a decision on (409 `fee_decision_required`).
+    var refusedFee by remember { mutableStateOf<SchedFeeRequired?>(null) }
+    var preview by remember { mutableStateOf<SchedCancelPreview?>(null) }
+    var reading by remember { mutableStateOf(cancelling) }
+    var who by remember { mutableStateOf<String?>(null) }
+    var whoChosen by remember { mutableStateOf(false) }
     val decision = remember { mutableStateOf("charge") }
     val feeNote = remember { mutableStateOf("") }
     val onlyThisPet = remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
 
+    // Read fresh each time the sheet opens: the family may have asked a minute ago. An older server
+    // answers 404 and any failure reads as none: today's sheet, the fee asked by the server's 409.
+    LaunchedEffect(appointmentId, mode) {
+        if (!cancelling) return@LaunchedEffect
+        reading = true
+        val read = try {
+            API.get<SchedCancelPreview>("/provider-appointments/$appointmentId/cancel-preview")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            null
+        }
+        preview = read
+        // Preset once the preview is read (the family asked → La familia), unless someone already chose.
+        if (read != null && !whoChosen) who = SchedVisitCancel.preset(read)
+        reading = false
+    }
+
+    // The server says who may cancel and what it costs: ask. None (an older server, or it failed): today's sheet.
+    val asksWho = cancelling && preview != null
+    val fee = if (cancelling && asksWho) SchedVisitCancel.feeShown(who, preview, refusedFee) else refusedFee
+    val askedAt = preview?.familyAskedAt
+    val ahead = fee?.takeIf { it.kind == "late_cancel" && it.measuredFrom == "family_ask" && it.familyAskedAt != null }
+        ?.let { SchedVisitCancel.hoursAhead(it.familyAskedAt, startsAt) }
+    val previewFee = preview?.takeIf { it.feeApplies }?.fee?.let { Money.format(it.amount, it.currency) }
+
+    fun choose(next: String?) {
+        who = next
+        whoChosen = true
+        form.clear("who")
+    }
+
     fun submit() {
         if (!form.check(listOf(
-                "reason" to if (mode == "cancel" && reason.value.nonEmpty == null) L("Say why the visit is cancelled") else null,
+                "reason" to if (cancelling && reason.value.nonEmpty == null) L("Say why the visit is cancelled") else null,
+                "who" to if (cancelling && asksWho && who == null) L("Choose who cancels.") else null,
                 "feeNote" to if (fee != null && decision.value == "waive" && feeNote.value.nonEmpty == null) L("Say why the fee is waived") else null,
             ))) return
         val body = mutableMapOf<String, Any?>()
-        if (fee != null) body["fee"] = mapOf("decision" to decision.value, "note" to feeNote.value.nonEmpty)
+        val sentWho = if (asksWho) who else null
+        // The business's own cancellation sends no fee at all (a charge would be refused: `business_cancel_no_fee`).
+        if (fee != null && sentWho != SchedVisitCancel.business) body["fee"] = mapOf("decision" to decision.value, "note" to feeNote.value.nonEmpty)
         if (together.isNotEmpty()) body["onlyThisPet"] = onlyThisPet.value
-        if (mode == "cancel") body["reason"] = reason.value.nonEmpty
+        if (cancelling) {
+            body["reason"] = reason.value.trim()
+            if (sentWho != null) body["cancelledBy"] = sentWho
+        }
         val path = if (mode == "no_show") "no-show" else "cancel"
         working = true
         scope.launch {
@@ -900,10 +956,18 @@ fun SchedMissedSheet(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                val wanted = (e as? SchedFailure)?.fee
+                val failure = e as? SchedFailure
+                val wanted = failure?.fee
                 if (wanted != null) {
-                    fee = wanted
+                    refusedFee = wanted
+                    // Only the family's cancellation takes a fee: the server asking means it reads it as theirs.
+                    if (asksWho && who != SchedVisitCancel.family) {
+                        who = SchedVisitCancel.family
+                        whoChosen = true
+                    }
                     Toast.show(L("Decide about the fee, then confirm."))
+                } else if (failure?.code == "business_cancel_no_fee" || (e as? APIError)?.code == "business_cancel_no_fee") {
+                    Toast.error(L("Your business is cancelling: no fee is charged to the family."))
                 } else {
                     form.apply(schedAPIError(e), mapOf("reason" to "reason", "fee.note" to "feeNote"))
                 }
@@ -920,6 +984,7 @@ fun SchedMissedSheet(
         isDirty = reason.value.isNotEmpty() || feeNote.value.isNotEmpty(), form = form,
         primaryTitle = if (mode == "no_show") L("Mark no-show") else L("Cancel visit"),
         primaryVariant = ButtonVariant.destructive, isWorking = working, cancelTitle = L("Back"),
+        primaryDisabled = cancelling && reading,
         onPrimary = { submit() },
         modifier = modifier.sheetPresentation(setOf(PresentationDetent.medium, PresentationDetent.large)),
     ) {
@@ -932,7 +997,35 @@ fun SchedMissedSheet(
                 selection = onlyThisPet,
             )
         }
-        if (mode == "cancel") {
+        if (cancelling && (asksWho || reading)) {
+            ModalSection(title = L("Who cancels?"), required = true, modifier = Modifier.formScrollTarget("who", form)) {
+                if (reading) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(16.dp), color = Theme.inkSoft, strokeWidth = 2.dp)
+                        Text(L("Checking the cancellation terms…"), style = Theme.text(14), color = Theme.inkSoft)
+                    }
+                } else {
+                    if (askedAt != null) {
+                        Text(LF("The family asked to cancel on %@.", DateText.dayTime(askedAt)), style = Theme.text(14, FontWeight.SemiBold), color = Theme.inkStrong)
+                    }
+                    val missing = form.error("who")
+                    OptionCards(
+                        options = listOf(
+                            OptionCard(
+                                SchedVisitCancel.family, title = L("The family"),
+                                description = previewFee?.let { LF("It’s late: the %@ fee can apply.", it) } ?: L("No fee applies."),
+                                icon = "users", accent = Theme.pink,
+                            ),
+                            OptionCard(SchedVisitCancel.business, title = L("We do"), description = L("Someone is sick, the business closes…: never a fee."), icon = "store", accent = Theme.pink),
+                        ),
+                        selection = stateOf<String?>({ who }) { choose(it) },
+                        invalid = missing != null,
+                    )
+                    if (missing != null) Text(missing, style = Theme.text(14, FontWeight.SemiBold), color = Theme.destructive)
+                }
+            }
+        }
+        if (cancelling) {
             ModalSection(title = L("Why"), required = true) {
                 SchedBareField(prompt = L("The family called, the pet is sick…"), text = reason, key = "reason", form = form)
             }
@@ -945,6 +1038,8 @@ fun SchedMissedSheet(
                 title = if (required.kind == "no_show") L("No-show fee") else L("Late cancellation fee"),
                 subtitle = LF("You decide: charge %@ to their account, or waive it.", amount),
             ) {
+                // Lateness counts from when the family asked, not from now (docs/family-money.md §5).
+                if (ahead != null) Text(LF("They asked %d h ahead.", ahead), style = Theme.text(14), color = Theme.inkStrong)
                 OptionCards(
                     options = listOf(
                         OptionCard("charge", title = LF("Charge %@", amount), description = L("It goes on their account to collect."), icon = "hand-coins", accent = Theme.mango),

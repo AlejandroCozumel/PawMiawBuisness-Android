@@ -173,6 +173,20 @@ data class SchedAppointment(
     val feeDecision: String? = null,
     val feeInvoiceId: String? = null,
     val feeNote: String? = null,
+    /**
+     * Who cancelled a cancelled visit (docs/family-money.md §5 in paw-miaw-backend): `family` (a fee
+     * may follow) or `business` (never a fee). Null for one cancelled before this was recorded;
+     * absent from an older server.
+     */
+    val cancelledBy: String? = null,
+    /** While the family's ask to cancel waits: when it asked ("¿Quién cancela?" presets La familia; lateness counts from it). */
+    val familyCancelAskedAt: String? = null,
+    /** The family's own answer about whether the pet went, kept after the visit is closed (`attended` = "Sí fuimos", `missed`). */
+    val familyAnswer: String? = null,
+    /** A no-show the family answered "Sí fuimos" afterwards: when it said so. It changes nothing by itself. */
+    val disputedAt: String? = null,
+    /** When the business took that answer off Home's "Te necesita" (the answer stays on the visit). */
+    val disputeDismissedAt: String? = null,
     val reportKind: String? = null,
     val groomStage: String? = null,
     val groomReadyNotifiedAt: String? = null,
@@ -670,12 +684,20 @@ data class SchedInvoice(
     val createdAt: String? = null,
     val updatedAt: String? = null,
     val lineItems: List<SchedInvoiceLine>? = null,
+    /** "Perdonar saldo" (docs/family-money.md §1): what was forgiven, when, by whom and why. Absent from an older server. */
+    val forgivenAmount: Int? = null,
+    val forgivenAt: String? = null,
+    val forgivenReason: String? = null,
+    val forgivenBy: SchedActor? = null,
+    val revision: String? = null,
 )
 
 /** Where a visit's bill stands (web lib/visit-bill.ts `billStage`). */
 enum class SchedBillStage(val rawValue: String) {
     notStarted("notStarted"), noCharge("noCharge"), canceled("canceled"), noBill("noBill"), needsPrice("needsPrice"),
-    building("building"), ready("ready"), partPaid("partPaid"), paid("paid"), covered("covered");
+    building("building"), ready("ready"), partPaid("partPaid"), paid("paid"), covered("covered"),
+    /** What was left was forgiven by the business ("Saldo perdonado", docs/family-money.md §1). */
+    forgiven("forgiven");
 
     val label: String
         get() = when (this) {
@@ -689,11 +711,12 @@ enum class SchedBillStage(val rawValue: String) {
             partPaid -> L("Part paid")
             paid -> L("Paid")
             covered -> L("Nothing to charge")
+            forgiven -> L("Balance forgiven")
         }
 
     val state: ProviderState
         get() = when (this) {
-            notStarted, noCharge, canceled, noBill -> ProviderState.closed
+            notStarted, noCharge, canceled, noBill, forgiven -> ProviderState.closed
             needsPrice, ready, partPaid -> ProviderState.waiting
             building -> ProviderState.active
             paid, covered -> ProviderState.done
@@ -714,6 +737,8 @@ enum class SchedBillStage(val rawValue: String) {
                 if (noCharge) return SchedBillStage.noCharge
                 return if (paid <= 0 && (visitStatus == "in_progress" || visitStatus == "completed")) noBill else canceled
             }
+            // Forgiven is not paid: nothing more is asked, and it says so.
+            if (invoice.status == "forgiven") return forgiven
             if (invoice.status == "paid" || (invoice.status != "draft" && balance <= 0)) {
                 return if (total == 0) covered else SchedBillStage.paid
             }
@@ -771,4 +796,63 @@ data class SchedFeeRequired(
     val kind: String,
     val amount: Int,
     val currency: String?,
+    /** When the family asked to cancel, if it did (docs/family-money.md §5). Absent from an older server. */
+    val familyAskedAt: String? = null,
+    /** What lateness was measured from: `family_ask` or `now`. Null for a no-show. */
+    val measuredFrom: String? = null,
 )
+
+/**
+ * What the cancel sheet reads first (GET /provider-appointments/{id}/cancel-preview,
+ * docs/family-money.md §6): whether the family asked to cancel, and the fee if the family is
+ * the one cancelling. An older server answers 404: the sheet keeps today's behaviour.
+ */
+@Serializable
+data class SchedCancelPreview(
+    val familyAskedAt: String? = null,
+    /** "¿Quién cancela?" preset: `family` when the family asked; null leaves the choice open. */
+    val suggestedCancelledBy: String? = null,
+    val measuredFrom: String? = null,
+    /** Cancelled by the family now, the late-cancellation fee applies. Never for the business. */
+    val feeApplies: Boolean = false,
+    val fee: Fee? = null,
+    /** The business's late-cancel window; null = never late. */
+    val windowHours: Int? = null,
+) {
+    @Serializable
+    data class Fee(val kind: String? = null, val amount: Int = 0, val currency: String? = null)
+}
+
+/**
+ * Cancelling a visit, as the business's sheet asks it (web lib/visit-cancel.ts; docs/family-money.md
+ * §5 and §6 in paw-miaw-backend). "¿Quién cancela?" — La familia / Nosotros — preset to La familia
+ * when the family asked ("Pedir cancelar"). Nosotros never takes a fee and is never asked about one.
+ * La familia is offered the late-cancellation fee when it applies (measured from the family's ask
+ * when there was one), charged or waived with a reason. An older server has no preview: nothing is
+ * asked about who cancels, and the fee comes from its 409 `fee_decision_required`, as before.
+ */
+object SchedVisitCancel {
+    const val family = "family"
+    const val business = "business"
+
+    /** Who the sheet starts on: the server's suggestion (the family asked), else nobody chosen yet. */
+    fun preset(preview: SchedCancelPreview?): String? = preview?.suggestedCancelledBy?.takeIf { it == family || it == business }
+
+    /** The fee to decide on while cancelling, or null: never for the business; the server's 409 wins over the preview. */
+    fun feeShown(who: String?, preview: SchedCancelPreview?, refused: SchedFeeRequired?): SchedFeeRequired? {
+        if (who == business) return null
+        if (refused != null) return refused
+        val fee = preview?.fee
+        if (who == family && preview != null && preview.feeApplies && fee != null) {
+            return SchedFeeRequired(kind = "late_cancel", amount = fee.amount, currency = fee.currency, familyAskedAt = preview.familyAskedAt, measuredFrom = preview.measuredFrom)
+        }
+        return null
+    }
+
+    /** Whole hours between the family's ask and the visit's start: "Pidió con 5 h de anticipación". */
+    fun hoursAhead(askedAt: String?, startsAt: String?): Int? {
+        val asked = DateText.parse(askedAt) ?: return null
+        val starts = DateText.parse(startsAt) ?: return null
+        return maxOf(0, ((starts.toEpochMilli() - asked.toEpochMilli()) / 3_600_000L).toInt())
+    }
+}

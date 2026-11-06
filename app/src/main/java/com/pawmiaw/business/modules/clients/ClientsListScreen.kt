@@ -758,6 +758,8 @@ private fun ClientsClientRow(client: ClientsClient, needle: String, showOwed: Bo
                 FlowLayout(spacing = 4.dp) {
                     clientsStatusTag(client.status)
                     ClientsLinkBadge(linked = client.isLinked)
+                    // "Se desconectó de PawMiaw el {fecha}": an unlink cleared the family (docs/family-money.md §1).
+                    ClientsDisconnectedMark(disconnectedAt = client.disconnectedAt, disconnectedBy = client.disconnectedBy)
                 }
             }
             Spacer(Modifier.width(8.dp))

@@ -303,7 +303,47 @@ data class HomeNeeds(
     val stock: HomeStockCounts? = null,
     val due: HomeDueCounts? = null,
     val onlineRequests: HomeOnlineRequestList? = null,
+    /**
+     * Families who said "Sí fuimos" to a visit recorded as a no-show (docs/family-money.md §5): up to 8
+     * items, `count` all. Null without appointments.view; absent from an older server. An item leaves
+     * once its fee bill is forgiven, cancelled or paid, the business dismisses it, or 14 days after.
+     */
+    val disputes: HomeDisputes? = null,
 )
+
+@Serializable
+data class HomeDisputes(
+    val count: Int? = null,
+    val items: List<HomeDispute>? = null,
+)
+
+/** One family's "Sí fuimos" on Home. Amounts are null without billing.view. */
+@Serializable
+data class HomeDispute(
+    val appointmentId: String,
+    val petName: String? = null,
+    val clientName: String? = null,
+    val serviceLabel: String? = null,
+    val startsAt: String? = null,
+    val disputedAt: String? = null,
+    val providerClientId: String? = null,
+    val providerClientPetId: String? = null,
+    /** The fee bill to forgive ("Perdonar el cargo"), or null when none was charged. */
+    val feeInvoiceId: String? = null,
+    val fee: Fee? = null,
+) {
+    val id: String get() = appointmentId
+
+    @Serializable
+    data class Fee(
+        val invoiceId: String? = null,
+        val status: String? = null,
+        val kind: String? = null,
+        val amount: Int? = null,
+        val balance: Int? = null,
+        val currency: String? = null,
+    )
+}
 
 @Serializable
 data class HomeNotesToSign(

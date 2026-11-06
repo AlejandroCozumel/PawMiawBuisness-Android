@@ -557,6 +557,8 @@ private fun HomePolicySheet() {
                 options = listOf(2, 4, 12, 24, 48).map { it to LF("%d hours before", it) },
                 selection = window,
             )
+            // The family sees the business's terms (docs/family-money.md §5): before booking and on each visit.
+            Text(L("Families see this fee, and until when they can cancel without it, when they book and on every visit."), style = Theme.text(14), color = Theme.inkSoft)
         } else if (failed) {
             ErrorState(message = L("Could not load the store settings.")) { load() }
         } else {

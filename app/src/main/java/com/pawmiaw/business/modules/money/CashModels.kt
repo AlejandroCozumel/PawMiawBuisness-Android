@@ -408,6 +408,15 @@ data class CashInvoice(
     val cancelReason: String? = null,
     val canceledAt: String? = null,
     val canceledBy: CashActor? = null,
+    /**
+     * "Perdonar saldo" (docs/family-money.md §1 in paw-miaw-backend): what was forgiven, when, by
+     * whom and why. Always total − refunded = paid + forgiven + balance. The reason stays the
+     * business's: the family only reads "Saldo perdonado". Absent from an older server.
+     */
+    val forgivenAmount: Int? = null,
+    val forgivenAt: String? = null,
+    val forgivenReason: String? = null,
+    val forgivenBy: CashActor? = null,
     val locationId: String? = null,
     val receiptEmailedTo: String? = null,
     val lineItemCount: Int? = null,
@@ -451,6 +460,8 @@ data class CashInvoiceTotals(
     val paidAmount: Int,
     val balanceAmount: Int,
     val draftAmount: Int? = null,
+    /** What was forgiven on the list's bills ("Perdonar saldo"): out of billed, neither paid nor owed. Absent from an older server. */
+    val forgivenAmount: Int? = null,
     val standingCount: Int,
 )
 
@@ -648,6 +659,9 @@ data class CashCollectionItem(
     val phone: String? = null,
     val email: String? = null,
     val onPawMiaw: Boolean? = null,
+    /** The family unlinked (or the business did): "Se desconectó de PawMiaw el {fecha}" (docs/family-money.md §1). Absent from an older server. */
+    val disconnectedAt: String? = null,
+    val disconnectedBy: String? = null,
     val walkIn: Boolean? = null,
     val creditLimitAmount: Int? = null,
     val overLimit: Boolean? = null,
@@ -721,6 +735,9 @@ data class CashAccount(
         val phone: String? = null,
         val email: String? = null,
         val onPawMiaw: Boolean? = null,
+        /** The family unlinked (or the business did); a reminder in PawMiaw still reaches the bills' family. */
+        val disconnectedAt: String? = null,
+        val disconnectedBy: String? = null,
         val walkIn: Boolean? = null,
         val creditLimitAmount: Int? = null,
     )
@@ -920,6 +937,8 @@ data class CashExceptions(
     val total: Int,
     val withoutReason: Int,
     val items: List<CashException>,
+    /** Each kind's count from the server (`forgiven` among them); never below the rows sent. Absent from an older server. */
+    val counts: Map<String, Int>? = null,
 )
 
 @Serializable

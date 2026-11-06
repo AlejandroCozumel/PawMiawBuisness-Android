@@ -67,6 +67,8 @@ sealed class HomeSheet {
     data class program(val request: StaysRequest) : HomeSheet()
     data class setup(val sheet: HomeSetupSheet) : HomeSheet()
     data class closeShift(val session: CashSession) : HomeSheet()
+    /** "Perdonar el cargo" on a family's "Sí fuimos": the fee bill, forgiven over Home. */
+    data class forgiveFee(val invoiceId: String) : HomeSheet()
 
     val id: String
         get() = when (this) {
@@ -86,6 +88,7 @@ sealed class HomeSheet {
             is program -> "program-${request.id}"
             is setup -> "setup-${sheet.id}"
             is closeShift -> "close-shift-${session.id}"
+            is forgiveFee -> "forgive-fee-$invoiceId"
         }
 }
 
@@ -211,6 +214,30 @@ class HomeActions(private val scope: CoroutineScope) {
         withVisit(id) { a ->
             val context = context(a)
             sheet = HomeSheet.recordPast(context)
+        }
+    }
+
+    /** "Perdonar el cargo": a disputed no-show's fee bill, forgiven with a reason (docs/family-money.md §5). */
+    fun forgiveFee(invoiceId: String) {
+        sheet = HomeSheet.forgiveFee(invoiceId)
+    }
+
+    /** "Descartar" a family's "Sí fuimos": off "Te necesita"; the answer stays on the visit. */
+    fun dismissDispute(appointmentId: String) {
+        val key = "dispute-$appointmentId"
+        if (!begin(key)) return
+        scope.launch {
+            try {
+                API.send("POST", "/provider-appointments/$appointmentId/dispute/dismiss", emptyMap())
+                Toast.show(L("Dismissed. Their answer stays on the visit."))
+                announceDataChanged()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Toast.error(if ((e as? APIError)?.code == "no_dispute") L("The family has not answered this visit") else errorText(e))
+            } finally {
+                busy.remove(key)
+            }
         }
     }
 
@@ -589,6 +616,7 @@ class HomeActions(private val scope: CoroutineScope) {
             is HomeSheet.program -> HomeProgramRequestSheet(request = sheet.request)
             is HomeSheet.setup -> sheet.sheet.view(actions = this)
             is HomeSheet.closeShift -> CashCloseShiftSheet(session = sheet.session, onClosed = { announceDataChanged() })
+            is HomeSheet.forgiveFee -> CashForgiveBillSheet(invoiceId = sheet.invoiceId)
         }
     }
 

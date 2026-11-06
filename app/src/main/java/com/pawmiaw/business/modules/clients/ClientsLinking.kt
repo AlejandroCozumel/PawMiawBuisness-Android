@@ -9,6 +9,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -96,10 +97,34 @@ data class ClientsMergeResult(
 )
 
 @Serializable
-private data class ClientsUnlinkResult(
+data class ClientsUnlinkResult(
     val status: String? = null,
     val clientUnlinked: Boolean? = null,
-)
+    /** What was done with the bills (`keep`, `forgive`, `not_theirs`); null when the family stays linked through another pet. Absent from an older server. */
+    val openBills: String? = null,
+    /** `openBills: forgive`: how many bills and how much was forgiven. */
+    val forgiven: Forgiven? = null,
+) {
+    @Serializable
+    data class Forgiven(val count: Int = 0, val amount: Int = 0)
+}
+
+/**
+ * What unlinking a pet would do to the client's bills (GET …/unlink-preview,
+ * docs/family-money.md §1 in paw-miaw-backend), read before the sheet asks.
+ */
+@Serializable
+data class ClientsUnlinkPreview(
+    /** No other pet of this client is linked: the unlink clears the family and `openBills` applies. */
+    val clearsHousehold: Boolean = false,
+    /** What the client owes, by currency; empty when nothing. */
+    val owed: List<Owed> = emptyList(),
+    /** Bills paid, even in part: they stay with the family whatever is chosen. */
+    val paidCount: Int = 0,
+) {
+    @Serializable
+    data class Owed(val currency: String? = null, val amount: Int = 0, val count: Int = 0)
+}
 
 /** A save that failed (Swift `catch`), a cancel still cancelling. */
 private inline fun Throwable.unlessCancelled(handle: (Throwable) -> Unit) {
@@ -168,6 +193,8 @@ object ClientsMatches {
             "different_households" -> return L("They are linked to different PawMiaw families")
             "different_household_pets" -> return L("They are linked to different pets in PawMiaw")
             "not_linked" -> return L("This pet is not linked to PawMiaw")
+            "reason_required" -> return L("Say why the balance is forgiven.")
+            "forgive_forbidden" -> return L("You can’t forgive balances. Ask an owner or admin.")
         }
         if (api.status == 403) return L("You do not have permission to change clients")
         return api.message.nonEmpty ?: L("Something went wrong. Try again.")
@@ -954,6 +981,62 @@ private fun ClientsMergeLines(values: List<String>) {
     values.filter { it.isNotEmpty() }.forEach { Text(it, style = Theme.text(13), color = Theme.inkSoft) }
 }
 
+// MARK: - "Se desconectó"
+
+/**
+ * "Se desconectó de PawMiaw el 6 nov" (the family unlinked itself) or "Desvinculado el 6 nov"
+ * (the business did), from the client's `disconnectedAt` / `disconnectedBy` (web
+ * linking/disconnected-mark.tsx; docs/family-money.md §1 in paw-miaw-backend). Null while the
+ * client is linked or was never linked.
+ */
+object ClientsDisconnected {
+    fun text(disconnectedAt: String?, disconnectedBy: String?): String? {
+        if (disconnectedAt.nonEmpty == null) return null
+        val day = ClientsText.shortDay(disconnectedAt)
+        return if (disconnectedBy == "business") LF("Unlinked on %@", day) else LF("Disconnected from PawMiaw on %@", day)
+    }
+
+    /** What it means for money, said where the mark has room (the client's page, their account). */
+    fun detail(disconnectedAt: String?, disconnectedBy: String?): String? {
+        if (disconnectedAt.nonEmpty == null) return null
+        return if (disconnectedBy == "business") L("Your business unlinked them. What they owe from before stays theirs, and a reminder in PawMiaw still reaches them.")
+        else L("The family unlinked itself. What they owe from before stays theirs, and a reminder in PawMiaw still reaches them.")
+    }
+}
+
+/**
+ * The mark a disconnected client carries on its row, its page, Te deben and its account: a small
+ * amber pill with the day; `withDetail` adds the line saying what it means for what they owe.
+ * Nothing when it doesn't apply.
+ */
+@Composable
+fun ClientsDisconnectedMark(disconnectedAt: String?, disconnectedBy: String?, withDetail: Boolean = false, modifier: Modifier = Modifier) {
+    val text = ClientsDisconnected.text(disconnectedAt, disconnectedBy) ?: return
+    val detail = ClientsDisconnected.detail(disconnectedAt, disconnectedBy)
+    val pill: @Composable (Modifier) -> Unit = { pillModifier ->
+        Row(
+            pillModifier
+                .background(Theme.wash(Theme.mango, 12.0), CircleShape)
+                .border(1.dp, Theme.mix(Theme.mango, 55.0, Theme.borderSoft), CircleShape)
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+                .semantics(mergeDescendants = true) { if (!withDetail && detail != null) contentDescription = "$text. $detail" },
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Glyph("link-2-off", 12.dp, tint = Theme.inkStrong)
+            Text(text, style = Theme.text(11.2, FontWeight.Bold), color = Theme.inkStrong, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+    if (!withDetail || detail == null) {
+        pill(modifier)
+        return
+    }
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        pill(Modifier)
+        Text(detail, style = Theme.text(12), color = Theme.inkSoft)
+    }
+}
+
 // MARK: - Unlink a pet from the family
 
 data class ClientsUnlinkTarget(
@@ -965,26 +1048,117 @@ data class ClientsUnlinkTarget(
     val id: String get() = petId
 }
 
+/**
+ * The unlink and the family's bills (web linking-model.ts `unlinkAsksAboutBills`, `unlinkBody`,
+ * `unlinkProblem`, `owedCount`; unlink-pet-sheet.tsx `unlinkedMessage`). It asks what happens to
+ * the open bills only when the unlink clears the family and something is owed.
+ */
+object ClientsUnlinkRules {
+    /** "Seguir cobrando" (the default), "Perdonar el saldo", "Era otra familia". */
+    const val keep = "keep"
+    const val forgive = "forgive"
+    const val notTheirs = "not_theirs"
+
+    fun asksAboutBills(preview: ClientsUnlinkPreview?): Boolean =
+        preview != null && preview.clearsHousehold && preview.owed.any { it.amount > 0 }
+
+    /** What the unlink sends: nothing while it doesn't ask (the server keeps every bill with the family, as older apps), else the choice — with its reason when the balance is forgiven. */
+    fun body(asks: Boolean, choice: String, reason: String): Map<String, Any?> {
+        if (!asks) return emptyMap()
+        if (choice == forgive) return mapOf("openBills" to forgive, "reason" to reason.trim())
+        return mapOf("openBills" to choice)
+    }
+
+    /** Why the unlink can't go yet: forgiving needs a reason. */
+    fun problem(asks: Boolean, choice: String, reason: String): String? =
+        if (asks && choice == forgive && reason.trim().isEmpty()) "reason" else null
+
+    /** How many open bills, over every currency. */
+    fun owedCount(preview: ClientsUnlinkPreview?): Int = (preview?.owed ?: emptyList()).sumOf { it.count }
+
+    /** "$1,200.00" or, owed in two currencies, "$1,200.00 + US$40.00". */
+    fun owedAmounts(preview: ClientsUnlinkPreview): String =
+        preview.owed.filter { it.amount > 0 }.joinToString(" + ") { Money.format(it.amount, it.currency) }
+
+    /** Said whatever is chosen: paid bills never leave the family that paid them. */
+    fun receiptsLine(preview: ClientsUnlinkPreview?): String {
+        if (preview == null || preview.paidCount <= 0) return L("The family keeps its receipts.")
+        return if (preview.paidCount == 1) L("The family keeps its receipts: 1 paid bill stays in their PawMiaw.")
+        else LF("The family keeps its receipts: %d paid bills stay in their PawMiaw.", preview.paidCount)
+    }
+
+    /** The toast: unlinked, and what happened to the bills (forgiven: how much, when one currency says it). */
+    fun unlinkedMessage(result: ClientsUnlinkResult, petName: String, clientName: String, preview: ClientsUnlinkPreview?): String {
+        val forgiven = result.forgiven
+        if (result.openBills == forgive && forgiven != null && forgiven.count > 0) {
+            val currencies = (preview?.owed ?: emptyList()).filter { it.amount > 0 }
+            if (currencies.size == 1) return LF("%1\$@ unlinked. %2\$@ forgiven.", petName, Money.format(forgiven.amount, currencies[0].currency))
+            return if (forgiven.count == 1) LF("%@ unlinked. 1 bill forgiven.", petName) else LF("%1\$@ unlinked. %2\$d bills forgiven.", petName, forgiven.count)
+        }
+        if (result.openBills == notTheirs) return LF("%@ unlinked. What was never paid left their PawMiaw.", petName)
+        return if (result.clientUnlinked == true) LF("%1\$@ unlinked. %2\$@ is no longer linked to a PawMiaw family.", petName, clientName)
+        else LF("%@ unlinked.", petName)
+    }
+}
+
+/**
+ * Desvincular: the clinic keeps its pet and all its history, the family's PawMiaw pet stops
+ * being shared with the clinic. Before it asks, it reads what the unlink would do to the bills
+ * (GET …/unlink-preview, docs/family-money.md §1 in paw-miaw-backend). When this is the client's
+ * last linked pet and they owe something, it says how much ("Te debe $1,200 · 2 cuentas
+ * pendientes") and asks what happens to it: Seguir cobrando (the default: the family keeps seeing
+ * it), Perdonar el saldo (billing.waive_visit, with a reason) or Era otra familia (what was never
+ * paid leaves their PawMiaw). Whatever is chosen, the family keeps its receipts. An older server
+ * (no preview) unlinks as before, sending nothing.
+ */
 @Composable
 fun ClientsUnlinkPetSheet(target: ClientsUnlinkTarget, onDone: suspend () -> Unit = {}, modifier: Modifier = Modifier) {
     val dismiss = LocalDismiss.current
     val scope = rememberCoroutineScope()
+    val form = remember { FormState() }
     var working by remember { mutableStateOf(false) }
+    var preview by remember { mutableStateOf<ClientsUnlinkPreview?>(null) }
+    var reading by remember { mutableStateOf(true) }
+    val choice = remember { mutableStateOf(ClientsUnlinkRules.keep) }
+    val reason = remember { mutableStateOf("") }
+    val canForgive = Workspace.shared.can(Permission.billingWaiveVisit)
+
+    LaunchedEffect(target.clientId, target.petId) {
+        reading = true
+        // An older server answers 404 (no preview), and any failure reads as none: the unlink then sends nothing, as before.
+        preview = try {
+            API.get<ClientsUnlinkPreview>("/provider-clients/${target.clientId}/pets/${target.petId}/unlink-preview")
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Throwable) {
+            null
+        }
+        reading = false
+    }
+
+    val asks = ClientsUnlinkRules.asksAboutBills(preview)
 
     fun unlink() {
+        if (!form.check(listOf("reason" to if (ClientsUnlinkRules.problem(asks, choice.value, reason.value) == "reason") L("Say why the balance is forgiven.") else null))) return
+        val body = ClientsUnlinkRules.body(asks, choice.value, reason.value)
+        val shown = preview
         working = true
         scope.launch {
             try {
-                val result: ClientsUnlinkResult = API.post("/provider-clients/${target.clientId}/pets/${target.petId}/unlink")
-                Toast.show(
-                    if (result.clientUnlinked == true) LF("%1\$@ unlinked. %2\$@ is no longer linked to a PawMiaw family.", target.petName, target.clientName)
-                    else LF("%@ unlinked.", target.petName)
-                )
+                val path = "/provider-clients/${target.clientId}/pets/${target.petId}/unlink"
+                val result: ClientsUnlinkResult = if (body.isEmpty()) API.post(path) else API.post(path, body)
+                Toast.show(ClientsUnlinkRules.unlinkedMessage(result, target.petName, target.clientName, shown))
                 announceDataChanged()
                 onDone()
                 dismiss()
             } catch (failure: Throwable) {
-                failure.unlessCancelled { Toast.error(ClientsMatches.errorText(it)) }
+                failure.unlessCancelled {
+                    if ((it as? APIError)?.code == "reason_required") {
+                        form.check(listOf("reason" to L("Say why the balance is forgiven.")))
+                    } else {
+                        Toast.error(ClientsMatches.errorText(it))
+                    }
+                }
             } finally {
                 working = false
             }
@@ -996,11 +1170,14 @@ fun ClientsUnlinkPetSheet(target: ClientsUnlinkTarget, onDone: suspend () -> Uni
         subtitle = L("From the family’s PawMiaw"),
         systemImage = "link-2-off",
         accent = ModalAccent.pink,
+        isDirty = reason.value.isNotEmpty(),
+        form = form,
         primaryTitle = L("Unlink"),
         primaryVariant = ButtonVariant.destructive,
         isWorking = working,
         cancelTitle = L("Keep it linked"),
         primaryIcon = "link-2-off",
+        primaryDisabled = reading,
         onPrimary = { unlink() },
         modifier = modifier.sheetPresentation(setOf(PresentationDetent.medium, PresentationDetent.large)),
     ) {
@@ -1008,6 +1185,45 @@ fun ClientsUnlinkPetSheet(target: ClientsUnlinkTarget, onDone: suspend () -> Uni
             ClientsWhatHappensLine(LF("Your clinic keeps its copy of %@, with every visit, record and invoice.", target.petName), tint = Theme.pink)
             ClientsWhatHappensLine(LF("The family stops sharing %@ with your clinic: what they add in PawMiaw no longer reaches you, and what you write no longer reaches them.", target.petName), tint = Theme.pink)
             ClientsWhatHappensLine(L("If it was the wrong pet, unlink it and invite the family again to link the right one."), tint = Theme.pink)
+            // Said whatever is chosen: paid bills never leave the family that paid them.
+            ClientsWhatHappensLine(ClientsUnlinkRules.receiptsLine(preview), tint = Theme.pink)
+        }
+        val shown = preview
+        if (reading) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(16.dp), color = Theme.inkSoft, strokeWidth = 2.dp)
+                Text(L("Checking what they owe…"), style = Theme.text(14), color = Theme.inkSoft)
+            }
+        } else if (asks && shown != null) {
+            ModalSection(title = L("What happens to what they owe?")) {
+                val count = ClientsUnlinkRules.owedCount(shown)
+                val soft = Theme.inkSoft
+                Text(
+                    buildAnnotatedString {
+                        append(LF("They owe you %@", ClientsUnlinkRules.owedAmounts(shown)))
+                        withStyle(SpanStyle(fontWeight = FontWeight.Normal, color = soft)) {
+                            append(" · " + if (count == 1) L("1 open bill") else LF("%d open bills", count))
+                        }
+                    },
+                    style = Theme.text(14, FontWeight.Bold), color = Theme.inkStrong,
+                )
+                OptionCards(
+                    options = listOfNotNull(
+                        OptionCard(ClientsUnlinkRules.keep, title = L("Keep charging"), description = L("The family keeps seeing what they owe and their receipts."), icon = "hand-coins", accent = Theme.pink),
+                        if (canForgive) OptionCard(ClientsUnlinkRules.forgive, title = L("Forgive the balance"), description = L("Everything pending is forgiven."), icon = "hand-heart", accent = Theme.pink) else null,
+                        OptionCard(ClientsUnlinkRules.notTheirs, title = L("It was another family"), description = L("What was never paid stops showing in their PawMiaw; what was paid stays with whoever paid it."), icon = "users", accent = Theme.pink),
+                    ),
+                    selection = choice,
+                )
+                if (choice.value == ClientsUnlinkRules.forgive) {
+                    PMTextField(
+                        L("Why is it forgiven?"), text = reason, key = "reason", form = form,
+                        prompt = L("e.g. The family moved away, a courtesy"),
+                        hint = L("Only your team sees the reason. It shows in Cortes as an exception."),
+                        multiline = true, required = true,
+                    )
+                }
+            }
         }
     }
 }

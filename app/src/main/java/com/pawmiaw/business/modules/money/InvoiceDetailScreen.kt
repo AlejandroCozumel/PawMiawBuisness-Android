@@ -58,8 +58,11 @@ import kotlin.math.min
 //  visits/visit-money-sheets RefundSheet, invoices-page/cancel-invoice-sheet.tsx):
 //  its lines, tax, discount, payments and credit notes, and what can be done
 //  with it — charge it, send it to the desk, edit it, refund or credit it,
-//  cancel it, bill it again, open or email its receipt. Level 1 (the bill in
-//  front of you) reads it; each action follows its own permission.
+//  forgive what is left ("Perdonar saldo", docs/family-money.md §1 in
+//  paw-miaw-backend), cancel it, bill it again, open or email its receipt. A
+//  forgiven bill says what was forgiven, when, by whom and why, and takes no
+//  payment, edit or cancel. Level 1 (the bill in front of you) reads it; each
+//  action follows its own permission.
 //
 
 /** Swift `try?`. */
@@ -84,6 +87,7 @@ fun InvoiceDetailScreen(invoiceId: String, modifier: Modifier = Modifier) {
     var again by remember { mutableStateOf(false) }
     var refunding by remember { mutableStateOf(false) }
     var canceling by remember { mutableStateOf(false) }
+    var forgiving by remember { mutableStateOf(false) }
     var emailing by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
     val pendingPay = remember { booleanArrayOf(false) }
@@ -131,6 +135,7 @@ fun InvoiceDetailScreen(invoiceId: String, modifier: Modifier = Modifier) {
                         billAgain = { again = true },
                         refund = { refunding = true },
                         cancel = { canceling = true },
+                        forgive = { forgiving = true },
                         email = { emailing = true },
                     )
                 }
@@ -170,6 +175,9 @@ fun InvoiceDetailScreen(invoiceId: String, modifier: Modifier = Modifier) {
     if (canceling && bill != null) {
         AppSheet(onDismissRequest = { canceling = false }) { CashCancelBillSheet(bill = bill) { scope.launch { loader.load() } } }
     }
+    if (forgiving && bill != null) {
+        AppSheet(onDismissRequest = { forgiving = false }) { CashForgiveBillSheet(invoiceId = bill.id, listed = bill) { scope.launch { loader.load() } } }
+    }
 }
 
 @Composable
@@ -182,10 +190,11 @@ private fun InvoiceContent(
     billAgain: () -> Unit,
     refund: () -> Unit,
     cancel: () -> Unit,
+    forgive: () -> Unit,
     email: () -> Unit,
 ) {
     InvoiceHeader(bill, sending, edit, send, pay)
-    InvoiceSummary(bill, billAgain, refund, cancel)
+    InvoiceSummary(bill, billAgain, refund, cancel, forgive)
     InvoiceLines(bill)
     InvoicePayments(bill)
     val notes = bill.creditNotes
@@ -243,13 +252,14 @@ private fun InvoiceHeader(bill: CashInvoice, sending: Boolean, edit: () -> Unit,
 // MARK: Who, where it came from, where it stands
 
 @Composable
-private fun InvoiceSummary(bill: CashInvoice, billAgain: () -> Unit, refund: () -> Unit, cancel: () -> Unit) {
+private fun InvoiceSummary(bill: CashInvoice, billAgain: () -> Unit, refund: () -> Unit, cancel: () -> Unit, forgive: () -> Unit) {
     val workspace = Workspace.shared
     val kind = CashBillRules.kind(bill)
     val today = CashDay.today
     val late = CashBillRules.isOverdue(bill, today)
     val draft = bill.status == "draft"
     val canceled = bill.status == "canceled"
+    val forgiven = bill.status == "forgiven"
     val canFinalize = workspace.can(Permission.billingFinalizeInvoice)
     val chip = CashBillRules.chip(bill, today, canFinalize)
     val walkIn = CashBillRules.isWalkIn(bill)
@@ -289,6 +299,26 @@ private fun InvoiceSummary(bill: CashInvoice, billAgain: () -> Unit, refund: () 
                 )
                 bill.cancelReason.nonEmpty?.let { Text(it, style = Theme.text(14), color = Theme.inkSoft) }
             }
+        } else if (forgiven) {
+            // "Saldo perdonado {monto} · {fecha} · {quién}", then why: the business's own record of it.
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, Theme.borderSoft, RoundedCornerShape(Theme.chipRadius))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    listOfNotNull(
+                        LF("Balance forgiven %@", money(bill.forgivenAmount ?: 0)),
+                        bill.forgivenAt?.let { CashBillRules.dateTime(it) }?.nonEmpty,
+                        bill.forgivenBy?.name.nonEmpty,
+                    ).joinToString(" · "),
+                    style = Theme.text(14, FontWeight.Bold), color = Theme.inkStrong,
+                )
+                bill.forgivenReason.nonEmpty?.let { Text("“$it”", style = Theme.text(14), color = Theme.inkStrong) }
+                Text(L("The family sees “Balance forgiven” in its receipts; the reason stays with your team."), style = Theme.text(12), color = Theme.inkSoft)
+            }
         } else if (late) {
             val days = CashBillRules.daysLate(bill, today)
             Text(
@@ -307,7 +337,7 @@ private fun InvoiceSummary(bill: CashInvoice, billAgain: () -> Unit, refund: () 
         } else if (workspace.can(Permission.billingEditInvoice) && bill.amountPaid > 0) {
             SummaryNote(L("It has payments: to cancel it, give the money back first with a refund."))
         }
-        InvoiceLinks(bill, billAgain, refund, cancel)
+        InvoiceLinks(bill, billAgain, refund, cancel, forgive)
     }
 }
 
@@ -318,7 +348,7 @@ private fun SummaryNote(text: String) {
 
 /** Where the bill goes from here (web: the sheet's link chips). */
 @Composable
-private fun InvoiceLinks(bill: CashInvoice, billAgain: () -> Unit, refund: () -> Unit, cancel: () -> Unit) {
+private fun InvoiceLinks(bill: CashInvoice, billAgain: () -> Unit, refund: () -> Unit, cancel: () -> Unit, forgive: () -> Unit) {
     val workspace = Workspace.shared
     val nav = LocalNavigator.current
     val source = CashBillRules.source(bill)?.takeIf { CashBillRules.sourceAllowed(it, workspace) }
@@ -327,13 +357,15 @@ private fun InvoiceLinks(bill: CashInvoice, billAgain: () -> Unit, refund: () ->
     val again = CashBillRules.canBillAgain(bill, workspace)
     val canRefund = CashBillRules.canRefund(bill, workspace)
     val canCancel = CashBillRules.canCancel(bill, workspace)
-    if (source != null || openClient || store || again || canRefund || canCancel) {
+    val canForgive = CashBillRules.canForgive(bill, workspace)
+    if (source != null || openClient || store || again || canRefund || canForgive || canCancel) {
         FlowLayout(spacing = 6.dp) {
             if (source != null) CashLinkChip(title = CashBillRules.sourceLabel(source), icon = "external-link", modifier = Modifier.plainButton { nav.push(source) })
             if (openClient) CashLinkChip(title = L("Open client"), icon = "user-round", modifier = Modifier.plainButton { nav.push(ProviderRoute.client(bill.providerClientId)) })
             if (store) CashLinkChip(title = L("Charge at the Store, with products"), icon = "shopping-cart", modifier = Modifier.plainButton { nav.push(CashBillRules.storeCheckout(bill)) })
             if (again) CashLinkChip(title = L("Bill again"), icon = "copy", modifier = Modifier.plainButton(onClick = billAgain))
             if (canRefund) CashLinkChip(title = L("Refund or credit note"), icon = "undo-2", danger = true, modifier = Modifier.plainButton(onClick = refund))
+            if (canForgive) CashLinkChip(title = L("Forgive the balance"), icon = "hand-heart", danger = true, modifier = Modifier.plainButton(onClick = forgive))
             if (canCancel) CashLinkChip(title = L("Cancel the bill"), icon = "ban", danger = true, modifier = Modifier.plainButton(onClick = cancel))
         }
     }
@@ -377,6 +409,8 @@ private fun InvoiceLines(bill: CashInvoice) {
                     )
                 }
             }
+            val forgivenAmount = bill.forgivenAmount ?: 0
+            if (forgivenAmount > 0) CashBillTotalRow(label = L("Forgiven@amount"), value = "−${money(forgivenAmount)}")
             if (!draft && bill.status != "canceled") {
                 CashBillTotalRow(label = L("Paid@amount"), value = money(bill.amountPaid))
                 CashBillTotalRow(label = L("Balance"), value = money(bill.balanceDueAmount), strong = true)
@@ -682,6 +716,113 @@ fun CashCancelBillSheet(bill: CashInvoice, modifier: Modifier = Modifier, onDone
             if (error.code != "stale_bill") throw error
             onDone()
             throw APIError(status = 409, message = L("Someone changed this bill a moment ago — look at it again before canceling."), code = error.code, fields = emptyMap())
+        }
+    }
+}
+
+// MARK: - Forgiving what is left
+
+/**
+ * "Perdonar saldo" (web invoices-page/forgive-invoice-sheet.tsx; docs/family-money.md §1 and §6 in
+ * paw-miaw-backend): what is left on a bill out of draft is forgiven, with a reason the business
+ * keeps (the family only reads "Saldo perdonado"). Said before it is done: the amount, that it is
+ * an exception in Cortes, that it leaves Te deben and is not income, and that what was paid stays
+ * paid. Permission `billing.waive_visit`; callers only offer it to those who have it. Opened from
+ * a bill (Cuentas' row and the bill's page), from a visit whose fee the family disputes and from
+ * Home's "Te necesita": the bill is read in full here, so its id is enough (`listed` shows while
+ * it is read). Always POST /provider-invoices/{id}/forgive with the bill's revision.
+ */
+@Composable
+fun CashForgiveBillSheet(invoiceId: String, listed: CashInvoice? = null, modifier: Modifier = Modifier, onDone: (CashInvoice) -> Unit = {}) {
+    val dismiss = LocalDismiss.current
+    val scope = rememberCoroutineScope()
+    val form = remember { FormState() }
+    val reason = remember { mutableStateOf("") }
+    var working by remember { mutableStateOf(false) }
+    var detail by remember { mutableStateOf<CashInvoice?>(null) }
+    LaunchedEffect(invoiceId) {
+        detail = attempt { API.get<CashInvoice>("/provider-invoices/$invoiceId") }
+    }
+    val bill = detail?.takeIf { it.id == invoiceId } ?: listed?.takeIf { it.id == invoiceId }
+    val money: (Int) -> String = { cashMoney(it, bill?.currency ?: "MXN") }
+    val amount = bill?.let { money(it.balanceDueAmount) } ?: ""
+    val blocker = bill?.let { CashBillRules.forgiveBlocker(it) }
+    val asks = bill != null && blocker == null
+
+    fun confirm() {
+        val current = bill ?: return
+        if (blocker != null) {
+            Toast.error(CashBillRules.forgiveRefusalText(blocker) ?: L("This bill can’t be forgiven now."))
+            return
+        }
+        if (!form.check(listOf("reason" to if (reason.value.nonEmpty == null) L("Say why the balance is forgiven.") else null))) return
+        val body = linkedMapOf<String, Any?>("reason" to reason.value.trim())
+        current.revision?.let { body["expectedRevision"] = it }
+        working = true
+        scope.launch {
+            try {
+                val forgiven: CashInvoice = API.post("/provider-invoices/${current.id}/forgive", body)
+                Toast.show(LF("%1\$@ of %2\$@ forgiven.", money(forgiven.forgivenAmount ?: current.balanceDueAmount), current.invoiceNumber))
+                announceDataChanged()
+                onDone(forgiven)
+                dismiss()
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (failure: Throwable) {
+                val code = (failure as? APIError)?.code
+                val words = CashBillRules.forgiveRefusalText(code)
+                when {
+                    code == "reason_required" -> form.check(listOf("reason" to (words ?: "")))
+                    code == "stale_bill" -> {
+                        Toast.error(words ?: errorText(failure))
+                        dismiss()
+                    }
+                    words != null -> Toast.error(words)
+                    else -> Toast.error(errorText(failure, L("Could not forgive the balance.")))
+                }
+            } finally {
+                working = false
+            }
+        }
+    }
+
+    ProviderModal(
+        title = if (asks) LF("Forgive %1\$@ of %2\$@?", amount, bill?.invoiceNumber ?: "") else L("Forgive the balance"),
+        subtitle = L("It is recorded as an exception in Cortes. The family sees “Balance forgiven”."),
+        systemImage = "hand-heart",
+        accent = ModalAccent.pink,
+        isDirty = reason.value.isNotEmpty(),
+        form = form,
+        primaryTitle = if (asks) LF("Forgive %@", amount) else L("Forgive the balance"),
+        primaryVariant = ButtonVariant.destructive,
+        isWorking = working,
+        cancelTitle = L("Keep charging"),
+        primaryIcon = "hand-heart",
+        primaryDisabled = bill == null,
+        onPrimary = { confirm() },
+        modifier = modifier.sheetPresentation(setOf(PresentationDetent.medium, PresentationDetent.large)),
+    ) {
+        if (bill == null) {
+            LoadingState()
+        } else if (blocker != null) {
+            Text(CashBillRules.forgiveRefusalText(blocker) ?: L("This bill can’t be forgiven now."), style = Theme.text(14, FontWeight.SemiBold), color = Theme.destructive)
+        } else {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, Theme.borderSoft, RoundedCornerShape(Theme.boxRadius))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(L("It leaves what the client owes, Te deben and To charge, and doesn’t count as income."), style = Theme.text(14), color = Theme.inkStrong)
+                if (bill.amountPaid > 0) Text(LF("What was paid (%@) stays paid.", money(bill.amountPaid)), style = Theme.text(14), color = Theme.inkStrong)
+            }
+            PMTextField(
+                L("Why is it forgiven?"), text = reason, key = "reason", form = form,
+                prompt = L("e.g. The family moved away, a courtesy, a dispute settled"),
+                hint = L("Only your team sees the reason."),
+                multiline = true, required = true,
+            )
         }
     }
 }

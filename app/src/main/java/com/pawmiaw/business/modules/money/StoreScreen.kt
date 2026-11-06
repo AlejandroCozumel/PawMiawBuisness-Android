@@ -517,6 +517,8 @@ object CashSaleRow {
     /** What happened to the sale after it was rung up; nothing for a plain paid one. */
     fun state(sale: CashSaleSummary): Pair<String, Chip.Tone>? {
         if (sale.canceled) return L("Canceled@sale") to Chip.Tone.danger
+        // A sale left on account whose balance the business forgave ("Perdonar saldo", docs/family-money.md §1).
+        if (sale.status == "forgiven") return L("Balance forgiven") to Chip.Tone.online
         if (sale.returnedAmount >= sale.totalAmount && sale.totalAmount > 0) return L("Returned@sale") to Chip.Tone.online
         if (sale.returnedAmount > 0) return L("Part returned") to Chip.Tone.online
         if (sale.balanceDueAmount > 0) return L("Balance due") to Chip.Tone.warn

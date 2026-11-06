@@ -697,7 +697,11 @@ private fun DestinationStep(m: CashInvoiceEditorModel) {
         m.changed = true
     }))
     if (m.destination == "open") {
-        DateTimeField(label = L("Pay by"), date = m.dueAt, min = m.issuedAt, components = setOf(DatePickerComponent.date), key = "dueAt", form = m.form, required = true)
+        // The family's receipt says it, and they are reminded the day before (docs/family-money.md §3).
+        DateTimeField(
+            label = L("Pay by"), date = m.dueAt, min = m.issuedAt, components = setOf(DatePickerComponent.date), key = "dueAt", form = m.form,
+            hint = L("The family sees this date and is reminded the day before."), required = true,
+        )
     }
 }
 

@@ -481,6 +481,7 @@ fun SvcSessionRoster(
                                     missed = SvcMissedTarget(
                                         id = row.appointmentId, petName = row.name, clientName = row.clientName,
                                         subtitle = LF("Take %@ out of %@?", row.name, session.serviceLabel), mode = "cancel",
+                                        startsAt = session.startsAt,
                                     )
                                 }
                             }
@@ -495,6 +496,7 @@ fun SvcSessionRoster(
         AppSheet(onDismissRequest = { missed = null }) {
             SchedMissedSheet(
                 appointmentId = target.id, petName = target.petName, clientName = target.clientName, subtitle = target.subtitle, mode = target.mode,
+                startsAt = target.startsAt,
                 cancelledText = L("Taken out. The place is open."),
                 onDone = { scope.launch { reload() } },
             )

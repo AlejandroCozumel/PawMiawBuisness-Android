@@ -48,6 +48,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pawmiaw.business.*
+import com.pawmiaw.business.clients.ClientsDisconnectedMark
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -342,6 +343,8 @@ private fun CollectionChips(item: CashCollectionItem, today: String, money: (Int
     if (credit != null && credit > 0) {
         Chip(text = LF("%@ of credit to apply", money(credit)), tone = Chip.Tone.good, icon = "piggy-bank")
     }
+    // They still owe it after an unlink (docs/family-money.md §1): the family keeps seeing these bills.
+    ClientsDisconnectedMark(disconnectedAt = item.disconnectedAt, disconnectedBy = item.disconnectedBy)
     Chip(text = collectionLastContact(item), tone = Chip.Tone.muted)
 }
 
@@ -416,7 +419,9 @@ fun CashAccountScreen(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Throwable) {
-                Toast.error(failure)
+                // Nobody left on PawMiaw for these bills (after an unlink): said in words, with what to do instead.
+                if ((failure as? APIError)?.code == "not_on_pawmiaw") Toast.error(LF("%@ is not on PawMiaw — send it by email or WhatsApp", account.client.name))
+                else Toast.error(failure)
             } finally {
                 reminding = null
             }
@@ -538,13 +543,19 @@ private fun AccountHeader(account: CashAccount, money: (Int) -> String, canRecor
             }
         },
         footer = {
-            if (account.client.walkIn != true && (pets.isNotEmpty() || account.client.onPawMiaw == true)) {
+            val disconnected = account.client.disconnectedAt != null
+            if (account.client.walkIn != true && (pets.isNotEmpty() || account.client.onPawMiaw == true || disconnected)) {
                 Column(Modifier.fillMaxWidth()) {
                     RowDivider()
                     FlowLayout(spacing = 6.dp, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
                         for (pet in pets) Chip(text = pet, tone = Chip.Tone.muted, icon = "paw-print")
                         if (account.client.onPawMiaw == true) Chip(text = L("On PawMiaw"), tone = Chip.Tone.info, icon = "smartphone")
                     }
+                    // Unlinked: what they owe from before stays theirs (docs/family-money.md §1).
+                    ClientsDisconnectedMark(
+                        disconnectedAt = account.client.disconnectedAt, disconnectedBy = account.client.disconnectedBy, withDetail = true,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                    )
                 }
             }
         },
@@ -674,9 +685,15 @@ private fun AccountRemind(account: CashAccount, reminding: String?, onSend: (Str
             val phone = account.client.phone != null
             val email = account.client.email
             val onApp = account.client.onPawMiaw == true
+            // After an unlink the reminder still reaches the family the bills belong to; the server says `not_on_pawmiaw` when nobody is left.
+            val disconnected = account.client.disconnectedAt != null
             AccountReminderButton("whatsapp", "WhatsApp", if (phone) L("A message with the amount") else L("No phone on file"), "message-circle", phone, reminding, onSend)
             AccountReminderButton("email", L("Email"), email ?: L("No email on file"), "mail", email != null, reminding, onSend)
-            AccountReminderButton("app", L("In PawMiaw"), if (onApp) L("A notification on their phone") else L("Not on PawMiaw"), "smartphone", onApp, reminding, onSend)
+            AccountReminderButton(
+                "app", L("In PawMiaw"),
+                if (onApp) L("A notification on their phone") else if (disconnected) L("For the bills from before they unlinked") else L("Not on PawMiaw"),
+                "smartphone", onApp || disconnected, reminding, onSend,
+            )
         }
     }
 }

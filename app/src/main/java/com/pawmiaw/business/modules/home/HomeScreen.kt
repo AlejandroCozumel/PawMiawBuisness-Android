@@ -55,6 +55,8 @@ class HomePermissions(w: Workspace) {
     val clients: Boolean = w.can(Permission.clientsView)
     val sign: Boolean = w.can(Permission.recordsApprove)
     val register: Boolean = w.canAny(Permission.salesSell, Permission.billingRecordPayment, Permission.registerManage)
+    /** billing.waive_visit: "Perdonar el cargo" on a no-show the family disputes (docs/family-money.md §5). */
+    val forgive: Boolean = w.can(Permission.billingWaiveVisit)
 }
 
 /** Everything Home reads, refreshed together (the board every 30 s, as the web). */

@@ -364,6 +364,8 @@ fun CashStoreSettingsTab(settings: CashStoreSettings, onSaved: (CashStoreSetting
                     cents = bindOptional({ it.noShowFeeAmount }) { s, v -> s.copy(noShowFeeAmount = v) },
                     key = "fee", form = form,
                 )
+                // The family sees the business's terms (docs/family-money.md §5): before booking and on each visit.
+                Text(L("Families see this fee, and until when they can cancel without it, when they book and on every visit."), style = Theme.text(12), color = Theme.inkSoft)
                 ToggleRow(
                     title = L("Late cancellations too"),
                     subtitle = if (lateOn.value) L("Cancelling close to the visit is offered the same fee.") else L("Only no-shows are offered the fee."),

@@ -548,47 +548,54 @@ private fun ClientDetailHeader(
         stats = clientDetailStats(client, page, seesMoney, jump),
         actionsOnRow = true,
         storageKey = "client",
-    ) {
-        // Booking is the one filled button; then reaching the family, then what you do with the client.
-        if (book) {
-            PMButton(L("Book a visit"), systemImage = "calendar-plus", action = onBook)
-        }
-        if (tel != null) {
-            PMButton(L("Call"), systemImage = "phone", variant = ButtonVariant.outline) { openURL(tel) }
-        }
-        if (whatsapp != null) {
-            PMButton(L("WhatsApp"), systemImage = "message-circle", variant = ButtonVariant.outline) { openURL(whatsapp) }
-        }
-        if (tel != null || whatsapp != null) ChipRule()
-        if (workspace.can(Permission.petsCreate) && !client.isArchived) {
-            PMButton(L("Add pet"), systemImage = "paw-print", variant = ButtonVariant.outline, action = onAddPet)
-        }
-        if (workspace.can(Permission.clientsEdit) && !client.isLinked && !client.isArchived) {
-            PMButton(L("Link household"), systemImage = "link-2", variant = ButtonVariant.outline, action = onLink)
-        }
-        if (workspace.can(Permission.clientsEdit)) {
-            PMButton(L("Edit client"), systemImage = "pencil", variant = ButtonVariant.outline, action = onEdit)
-        }
-        AppMenu(label = { IconCircleLabel() }, accessibilityLabel = LF("More for %@", client.ownerName)) {
-            // One way to link at a time: the button while the family isn't linked, the menu item after.
-            val unlinkedPets = client.allPets.filter { it.isActive && !it.isLinked }
-            if (workspace.can(Permission.clientsEdit) && client.isLinked && unlinkedPets.isNotEmpty()) {
-                item(LF("Invite to link %@", unlinkedPets.joinToString(", ") { it.petName }), icon = "link-2") { onLink() }
+        actions = {
+            // Booking is the one filled button; then reaching the family, then what you do with the client.
+            if (book) {
+                PMButton(L("Book a visit"), systemImage = "calendar-plus", action = onBook)
             }
-            item(L("Invitations"), icon = "mail-plus") { onInvitations() }
+            if (tel != null) {
+                PMButton(L("Call"), systemImage = "phone", variant = ButtonVariant.outline) { openURL(tel) }
+            }
+            if (whatsapp != null) {
+                PMButton(L("WhatsApp"), systemImage = "message-circle", variant = ButtonVariant.outline) { openURL(whatsapp) }
+            }
+            if (tel != null || whatsapp != null) ChipRule()
+            if (workspace.can(Permission.petsCreate) && !client.isArchived) {
+                PMButton(L("Add pet"), systemImage = "paw-print", variant = ButtonVariant.outline, action = onAddPet)
+            }
+            if (workspace.can(Permission.clientsEdit) && !client.isLinked && !client.isArchived) {
+                PMButton(L("Link household"), systemImage = "link-2", variant = ButtonVariant.outline, action = onLink)
+            }
             if (workspace.can(Permission.clientsEdit)) {
-                divider()
-                item(L("Combine with another client"), icon = "git-merge") { onCombine() }
-                if (client.isArchived) {
-                    item(L("Restore"), icon = "rotate-ccw") { onRestore() }
-                } else {
-                    item(L("Archive client"), icon = "archive", destructive = true) {
-                        val owed = if (seesMoney && (page.account?.owed ?: 0) > 0) Money.format(page.account?.owed, currency = page.account?.currency) else null
-                        onArchive(owed)
+                PMButton(L("Edit client"), systemImage = "pencil", variant = ButtonVariant.outline, action = onEdit)
+            }
+            AppMenu(label = { IconCircleLabel() }, accessibilityLabel = LF("More for %@", client.ownerName)) {
+                // One way to link at a time: the button while the family isn't linked, the menu item after.
+                val unlinkedPets = client.allPets.filter { it.isActive && !it.isLinked }
+                if (workspace.can(Permission.clientsEdit) && client.isLinked && unlinkedPets.isNotEmpty()) {
+                    item(LF("Invite to link %@", unlinkedPets.joinToString(", ") { it.petName }), icon = "link-2") { onLink() }
+                }
+                item(L("Invitations"), icon = "mail-plus") { onInvitations() }
+                if (workspace.can(Permission.clientsEdit)) {
+                    divider()
+                    item(L("Combine with another client"), icon = "git-merge") { onCombine() }
+                    if (client.isArchived) {
+                        item(L("Restore"), icon = "rotate-ccw") { onRestore() }
+                    } else {
+                        item(L("Archive client"), icon = "archive", destructive = true) {
+                            val owed = if (seesMoney && (page.account?.owed ?: 0) > 0) Money.format(page.account?.owed, currency = page.account?.currency) else null
+                            onArchive(owed)
+                        }
                     }
                 }
             }
-        }
+        },
+    ) {
+        // Unlinked (by the family or by the business): when, and that what they owe from before stays theirs (docs/family-money.md §1).
+        ClientsDisconnectedMark(
+            disconnectedAt = client.disconnectedAt, disconnectedBy = client.disconnectedBy, withDetail = true,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
+        )
     }
 }
 

@@ -58,7 +58,10 @@ class SchedFailure(val api: APIError, val body: JSONValue?) : Exception(api.mess
             if (code != "fee_decision_required") return null
             val fee = body["fee"] ?: return null
             val amount = fee["amount"].int ?: return null
-            return SchedFeeRequired(kind = fee["kind"].string ?: "no_show", amount = amount, currency = fee["currency"].string)
+            return SchedFeeRequired(
+                kind = fee["kind"].string ?: "no_show", amount = amount, currency = fee["currency"].string,
+                familyAskedAt = fee["familyAskedAt"].string, measuredFrom = fee["measuredFrom"].string,
+            )
         }
 
     /** The emergency deposit a start waits on (409 `deposit_required`). */

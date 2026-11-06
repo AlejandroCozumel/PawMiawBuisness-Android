@@ -88,6 +88,13 @@ data class ClientsClient(
     val linkedAccountName: String? = null,
     val businessLinkedAt: String? = null,
     val canBookOnline: Boolean? = null,
+    /**
+     * When an unlink cleared the family, and which side did it (`family` | `business`;
+     * docs/family-money.md §1 in paw-miaw-backend): "Se desconectó de PawMiaw el {fecha}" /
+     * "Desvinculado el {fecha}". Null while linked or never linked; absent from an older server.
+     */
+    val disconnectedAt: String? = null,
+    val disconnectedBy: String? = null,
     val ownerEmail: String? = null,
     val recipientLanguage: String? = null,
     val ownerPhone: String? = null,

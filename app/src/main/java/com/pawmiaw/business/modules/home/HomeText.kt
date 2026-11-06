@@ -90,6 +90,8 @@ object HomeText {
         }
         val total = invoice.totalAmount ?: 0
         if (invoice.status == "canceled") return if (visit.billing == "no_charge") "no_charge" else "canceled"
+        // Forgiven is not paid: nothing more is asked ("Saldo perdonado", docs/family-money.md §1).
+        if (invoice.status == "forgiven") return "forgiven"
         if (invoice.status == "paid" || (invoice.status != "draft" && (invoice.balanceDueAmount ?: 0) <= 0)) {
             return if (total == 0) "covered" else "paid"
         }
@@ -108,6 +110,7 @@ object HomeText {
         "ready" -> L("Ready to charge")
         "part_paid" -> L("Part paid")
         "paid" -> L("Paid@bill")
+        "forgiven" -> L("Balance forgiven")
         else -> L("Nothing to charge")
     }
 

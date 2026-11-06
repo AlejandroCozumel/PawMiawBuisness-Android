@@ -126,6 +126,27 @@ class HomeNeedsYou(
                 }
             }
 
+            // "Sí fuimos": families who say the pet did come to a visit recorded as a no-show (docs/family-money.md §5).
+            // Amber like the visits left open: the business decides — forgive the fee or dismiss — and nothing changes by itself.
+            val disputes = needs?.disputes
+            if (disputes != null && (disputes.count ?: 0) > 0) {
+                val items = disputes.items ?: emptyList()
+                val more = (disputes.count ?: 0) - items.size
+                val canDismiss = permissions.edit || permissions.forgive
+                push("disputes") {
+                    NeedsCard(
+                        title = L("They say they came"), icon = "message-circle-question-mark", count = disputes.count,
+                        hint = L("Recorded as no-shows. You decide: forgive the fee or dismiss it."),
+                        tone = Theme.mango, attention = NeedsCard.Attention.amber,
+                        more = maxOf(0, more),
+                    ) {
+                        items.forEachIndexed { index, item ->
+                            key(item.id) { HomeDisputeRow(item = item, canForgive = permissions.forgive, canDismiss = canDismiss, first = index == 0, open = open) }
+                        }
+                    }
+                }
+            }
+
             // "Por cobrar": red while one is from an earlier day — it leads, like any other day-late problem — amber for today's.
             val charging = needs?.charging
             if (charging != null && (charging.count ?: 0) > 0) {
@@ -579,6 +600,37 @@ private fun HomeUnfinishedRow(item: HomeUnfinishedVisit, canRecord: Boolean, fir
             ) { actions.recordPast(item.id) }
         }
         PMButton(L("Open@needs"), variant = ButtonVariant.outline, size = ButtonSize.compact) { open(ProviderRoute.appointment(item.id)) }
+    }
+}
+
+/**
+ * A family's "Sí fuimos" after a no-show: the visit opens on tap; "Perdonar el cargo" while its fee
+ * bill owes, "Descartar" takes it off Home (the answer stays on the visit).
+ */
+@Composable
+private fun HomeDisputeRow(item: HomeDispute, canForgive: Boolean, canDismiss: Boolean, first: Boolean, open: (ProviderRoute) -> Unit) {
+    val actions = LocalHomeActions.current
+    val feeBalance = item.fee?.balance
+    val fee = if (feeBalance != null && feeBalance > 0) Money.format(feeBalance, item.fee?.currency) else null
+    val feeId = item.feeInvoiceId
+    NeedsRow(
+        title = "${item.petName ?: "—"} · ${item.serviceLabel ?: ""}",
+        hint = listOfNotNull(
+            listOfNotNull(DateText.day(DateText.parse(item.startsAt)), item.clientName.nonEmpty, fee?.let { LF("fee %@", it) }).joinToString(" · "),
+            item.disputedAt?.let { LF("said so %@", DateText.day(DateText.parse(it))) },
+        ).joinToString("\n"),
+        first = first,
+        modifier = Modifier.plainButton { open(ProviderRoute.appointment(item.appointmentId)) },
+    ) {
+        if (canForgive && feeId != null && actions != null) {
+            PMButton(L("Forgive the fee"), systemImage = "hand-heart", variant = ButtonVariant.outline, size = ButtonSize.compact) { actions.forgiveFee(feeId) }
+        }
+        if (canDismiss && actions != null) {
+            PMButton(L("Dismiss"), variant = ButtonVariant.outline, size = ButtonSize.compact, isWorking = actions.isBusy("dispute-${item.appointmentId}")) {
+                actions.dismissDispute(item.appointmentId)
+            }
+        }
+        if (actions == null) PMButton(L("Open@needs"), variant = ButtonVariant.outline, size = ButtonSize.compact) { open(ProviderRoute.appointment(item.appointmentId)) }
     }
 }
 

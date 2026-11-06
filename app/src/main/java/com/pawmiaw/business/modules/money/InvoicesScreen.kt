@@ -195,6 +195,7 @@ object CashBillRules {
             return (if (canFinalize) L("Ready to send") else L("Waiting for review")) to false
         }
         if (fullyGivenBack(bill)) return null
+        if (bill.status == "forgiven") return bill.forgivenAt?.let { LF("Forgiven %@", day(it)) to false }
         if (bill.status == "paid") {
             val paid = bill.allPayments.filter { !it.voided && !it.isRefund }.mapNotNull { it.paidAt }.sorted().lastOrNull()
             return paid?.let { LF("Paid %@@date", day(it)) to false }
@@ -218,6 +219,8 @@ object CashBillRules {
             "ready_for_payment", "open", "overdue" -> L("Unpaid@status") to ProviderState.waiting
             "partially_paid" -> L("Part paid@status") to ProviderState.waiting
             "paid" -> L("Paid@status") to ProviderState.done
+            // What was left on it was forgiven: "Saldo perdonado" (the family reads the same).
+            "forgiven" -> L("Forgiven@status") to ProviderState.closed
             else -> L("Canceled@status") to ProviderState.closed
         }
     }
@@ -226,7 +229,8 @@ object CashBillRules {
     fun canEdit(bill: CashInvoice, w: Workspace): Boolean {
         if (!w.can(Permission.billingEditInvoice)) return false
         val kind = kind(bill)
-        if (kind == "sale" || kind == "deposit" || bill.status == "canceled") return false
+        // A forgiven bill is closed: the server refuses an edit (`bill_forgiven`).
+        if (kind == "sale" || kind == "deposit" || bill.status == "canceled" || bill.status == "forgiven") return false
         if (bill.status == "paid" && !w.isOwnerOrAdmin) return false
         if (bill.status != "draft" && !w.can(Permission.billingFinalizeInvoice)) return false
         return true
@@ -236,7 +240,39 @@ object CashBillRules {
         w.can(Permission.billingFinalizeInvoice) && bill.status == "draft" && kind(bill) != "sale" && lineCount(bill) > 0 && bill.totalAmount > 0
 
     fun canRecordPayment(bill: CashInvoice, w: Workspace): Boolean =
-        w.can(Permission.billingRecordPayment) && bill.balanceDueAmount > 0 && bill.status != "canceled" && bill.status != "draft" && kind(bill) != "deposit"
+        w.can(Permission.billingRecordPayment) && bill.balanceDueAmount > 0 && bill.status != "canceled" && bill.status != "draft" && bill.status != "forgiven" && kind(bill) != "deposit"
+
+    /**
+     * "Perdonar saldo", as the server allows it (POST /provider-invoices/{id}/forgive): billing.waive_visit,
+     * a bill out of draft with a balance, never canceled or already forgiven, never a deposit (refunded
+     * instead). A counter sale left on account can be forgiven.
+     */
+    fun canForgive(bill: CashInvoice, w: Workspace): Boolean = w.can(Permission.billingWaiveVisit) && forgiveBlocker(bill) == null
+
+    /** What stops a bill from being forgiven, in the server's own codes (its 409s); null when nothing does. */
+    fun forgiveBlocker(bill: CashInvoice): String? = forgiveBlocker(bill.status, bill.balanceDueAmount, kind(bill))
+
+    fun forgiveBlocker(status: String, balance: Int, kind: String): String? = when {
+        status == "draft" -> "bill_draft"
+        status == "canceled" -> "bill_canceled"
+        status == "forgiven" -> "bill_forgiven"
+        kind == "deposit" -> "deposit"
+        balance <= 0 -> "nothing_owed"
+        else -> null
+    }
+
+    /** Why "Perdonar saldo" was refused, in words that say what to do instead (web `forgiveRefusalText`); null for another code. */
+    fun forgiveRefusalText(code: String?): String? = when (code) {
+        "reason_required" -> L("Say why the balance is forgiven.")
+        "forgive_forbidden" -> L("You can’t forgive balances. Ask an owner or admin.")
+        "bill_draft" -> L("A draft isn’t owed yet: send it to the desk or cancel it.")
+        "bill_canceled" -> L("This bill was canceled: there is nothing to forgive.")
+        "bill_forgiven" -> L("This balance was already forgiven.")
+        "deposit" -> L("A deposit isn’t forgiven: give it back with a refund.")
+        "nothing_owed" -> L("Nothing is owed on this bill.")
+        "stale_bill" -> L("Someone changed this bill a moment ago — look at it again before forgiving it.")
+        else -> null
+    }
 
     /** "Cobrar en la Tienda, con productos": the bill goes to the counter, to charge it with products from the shelf. */
     fun canCollectAtStore(bill: CashInvoice, w: Workspace): Boolean =
@@ -251,7 +287,7 @@ object CashBillRules {
     fun canCancel(bill: CashInvoice, w: Workspace): Boolean {
         if (!w.can(Permission.billingEditInvoice)) return false
         val kind = kind(bill)
-        if (kind == "sale" || kind == "deposit" || bill.status == "canceled" || bill.amountPaid > 0) return false
+        if (kind == "sale" || kind == "deposit" || bill.status == "canceled" || bill.status == "forgiven" || bill.amountPaid > 0) return false
         return bill.status == "draft" || w.can(Permission.billingFinalizeInvoice)
     }
 
@@ -277,7 +313,7 @@ object CashBillRules {
 // MARK: - The page
 
 private enum class CashInvoiceFilter {
-    due, overdue, desk, partial, draft, unpriced, paid, canceled;
+    due, overdue, desk, partial, draft, unpriced, paid, forgiven, canceled;
 
     val label: String
         get() = when (this) {
@@ -288,6 +324,7 @@ private enum class CashInvoiceFilter {
             draft -> L("Drafts")
             unpriced -> L("Needs a price")
             paid -> L("Paid@filter")
+            forgiven -> L("Forgiven@filter")
             canceled -> L("Canceled@filter")
         }
 
@@ -298,7 +335,7 @@ private enum class CashInvoiceFilter {
             overdue -> ChipTone.state(ProviderState.problem)
             draft -> ChipTone.state(ProviderState.upcoming)
             paid -> ChipTone.state(ProviderState.done)
-            canceled -> ChipTone.state(ProviderState.closed)
+            forgiven, canceled -> ChipTone.state(ProviderState.closed)
         }
 
     /** Oldest debt first rather than newest bill first: the rows are not grouped by day. */
@@ -313,6 +350,8 @@ private enum class CashInvoiceFilter {
             draft -> mapOf("statuses" to "draft")
             unpriced -> mapOf("needsPrice" to "true")
             paid -> mapOf("statuses" to "paid")
+            // "Saldo perdonado" (docs/family-money.md §1 in paw-miaw-backend).
+            forgiven -> mapOf("statuses" to "forgiven")
             canceled -> mapOf("statuses" to "canceled")
         }
 
@@ -325,6 +364,7 @@ private enum class CashInvoiceFilter {
             desk -> L("No unpaid bills") to L("Bills sent to be charged, with nothing paid yet, wait here.")
             partial -> L("No part-paid bills") to L("Bills with some of the money in show up here.")
             paid -> L("No paid bills here") to L("Paid bills show up here once the money is in.")
+            forgiven -> L("No forgiven balances") to L("Bills whose balance you forgave show up here.")
             canceled -> L("No canceled bills") to L("Bills canceled by mistake or on purpose show up here.")
         }
 }
@@ -419,6 +459,8 @@ sealed class CashBillAction {
     data object client : CashBillAction()
     data object again : CashBillAction()
     data object refund : CashBillAction()
+    /** "Perdonar saldo" (billing.waive_visit): what is left on the bill, forgiven with a reason. */
+    data object forgive : CashBillAction()
     data object cancel : CashBillAction()
 }
 
@@ -434,6 +476,8 @@ fun InvoicesScreen(modifier: Modifier = Modifier) {
     var template by remember { mutableStateOf<CashInvoice?>(null) }
     var refunding by remember { mutableStateOf<CashInvoice?>(null) }
     var canceling by remember { mutableStateOf<CashInvoice?>(null) }
+    // "Perdonar saldo" from a row's menu (docs/family-money.md §1 in paw-miaw-backend).
+    var forgiving by remember { mutableStateOf<CashInvoice?>(null) }
     var sendingId by remember { mutableStateOf<String?>(null) }
     /** A bill saved with "Charge it now": its payment opens once the editor has left. */
     val pendingPay = remember { arrayOfNulls<CashInvoice>(1) }
@@ -510,6 +554,7 @@ fun InvoicesScreen(modifier: Modifier = Modifier) {
             is CashBillAction.source -> nav.push(action.route)
             CashBillAction.client -> nav.push(ProviderRoute.client(bill.providerClientId))
             CashBillAction.refund -> refunding = bill
+            CashBillAction.forgive -> forgiving = bill
             CashBillAction.cancel -> canceling = bill
             CashBillAction.send -> {
                 sendingId = bill.id
@@ -604,6 +649,9 @@ fun InvoicesScreen(modifier: Modifier = Modifier) {
     }
     canceling?.let { bill ->
         AppSheet(onDismissRequest = { canceling = null }) { CashCancelBillSheet(bill = bill) { scope.launch { reload() } } }
+    }
+    forgiving?.let { bill ->
+        AppSheet(onDismissRequest = { forgiving = null }) { CashForgiveBillSheet(invoiceId = bill.id, listed = bill) { scope.launch { reload() } } }
     }
 }
 
@@ -828,6 +876,9 @@ private fun ListFooterTotals(model: CashInvoicesModel, total: Int) {
                 // Drafts are billed but neither paid nor owed yet: said apart, so the figures add up.
                 val drafts = totals.draftAmount
                 if (drafts != null && drafts > 0) FooterFigure(L("In drafts"), drafts)
+                // Forgiven is out of billed, neither paid nor owed: said apart, so the figures still add up.
+                val forgiven = totals.forgivenAmount
+                if (forgiven != null && forgiven > 0) FooterFigure(L("Forgiven@amount"), forgiven)
             }
         }
     }
@@ -1025,6 +1076,7 @@ private fun CashInvoiceRowMenu(bill: CashInvoice, walkIn: Boolean, onAction: (Ca
     val source = CashBillRules.source(bill)?.takeIf { CashBillRules.sourceAllowed(it, workspace) }
     val refund = CashBillRules.canRefund(bill, workspace)
     val cancel = CashBillRules.canCancel(bill, workspace)
+    val forgive = CashBillRules.canForgive(bill, workspace)
     AppMenu(label = { IconCircleLabel(size = 32.dp) }, accessibilityLabel = LF("More for %@", bill.invoiceNumber)) {
         item(L("Open the bill"), icon = "file-text") { onAction(CashBillAction.open) }
         if (CashBillRules.canRecordPayment(bill, workspace)) item(L("Take a payment"), icon = "coins") { onAction(CashBillAction.pay) }
@@ -1034,8 +1086,9 @@ private fun CashInvoiceRowMenu(bill: CashInvoice, walkIn: Boolean, onAction: (Ca
         if (source != null) item(CashBillRules.sourceLabel(source), icon = "external-link") { onAction(CashBillAction.source(source)) }
         if (workspace.can(Permission.clientsView) && !walkIn) item(L("Open client"), icon = "user-round") { onAction(CashBillAction.client) }
         if (CashBillRules.canBillAgain(bill, workspace)) item(L("Bill again"), icon = "copy") { onAction(CashBillAction.again) }
-        if (refund || cancel) divider()
+        if (refund || forgive || cancel) divider()
         if (refund) item(L("Refund or credit note"), icon = "undo-2", destructive = true) { onAction(CashBillAction.refund) }
+        if (forgive) item(L("Forgive the balance"), icon = "hand-heart", destructive = true) { onAction(CashBillAction.forgive) }
         if (cancel) item(L("Cancel the bill"), icon = "ban", destructive = true) { onAction(CashBillAction.cancel) }
     }
 }

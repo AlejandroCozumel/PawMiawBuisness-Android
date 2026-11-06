@@ -103,8 +103,10 @@ object SchedVisitBanners {
 private enum class BannerTone { warn, danger, info }
 
 /**
- * What the visit is waiting on: a request from the family, a missed visit's story (web
- * `Banners`): full-width rows under the header's client line, each tinted by its tone.
+ * What the visit is waiting on: a request from the family, a missed visit's story — who
+ * cancelled it, its fee — and the family's "Sí fuimos" after a no-show with what the business
+ * can do about it (web `Banners`; docs/family-money.md §5): full-width rows under the header's
+ * client line, each tinted by its tone.
  */
 @Composable
 fun SchedVisitBanners(
@@ -112,6 +114,11 @@ fun SchedVisitBanners(
     onEdit: (() -> Unit)? = null,
     onCancel: (() -> Unit)? = null,
     onKeep: (() -> Unit)? = null,
+    /** "Perdonar el cargo": the no-show fee's bill, forgiven with a reason. */
+    onForgiveFee: (() -> Unit)? = null,
+    /** "Descartar": off Home's "Te necesita"; the answer stays here. */
+    onDismissDispute: (() -> Unit)? = null,
+    dismissing: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val a = appointment
@@ -152,11 +159,33 @@ fun SchedVisitBanners(
             )
         }
         if (a.isGone) {
+            // Who cancelled: the family (a fee may follow) or the business (never one). Older visits don't say.
+            val cancelledTitle = when (a.cancelledBy) {
+                "family" -> L("Cancelled by the family")
+                "business" -> L("Cancelled by your business")
+                else -> L("Cancelled")
+            }
             Banner(
                 BannerTone.danger,
-                if (a.status == "no_show") L("They didn’t come") else L("Cancelled"),
+                if (a.status == "no_show") L("They didn’t come") else cancelledTitle,
                 listOf(outcome ?: a.cancelReason, fee).mapNotNull { it.nonEmpty }.joinToString(" · ").nonEmpty,
             )
+        }
+        // "Sí fuimos": the family says the pet did come after the no-show was recorded. Nothing changes by itself.
+        val disputedAt = a.disputedAt
+        if (a.status == "no_show" && disputedAt != null) {
+            val dismissedAt = a.disputeDismissedAt
+            Banner(
+                BannerTone.warn,
+                LF("The family says they did come (%@)", DateText.dayTime(disputedAt)),
+                if (dismissedAt != null) LF("Dismissed on %@.", DateText.date(dismissedAt))
+                else if (onForgiveFee != null) L("You decide: forgive the fee or dismiss it. Nothing changes by itself.")
+                else L("Nothing changes by itself."),
+                showsActions = onForgiveFee != null || onDismissDispute != null,
+            ) {
+                if (onForgiveFee != null) PMButton(L("Forgive the fee"), size = ButtonSize.header, action = onForgiveFee)
+                if (onDismissDispute != null) PMButton(L("Dismiss"), variant = ButtonVariant.outline, size = ButtonSize.header, isWorking = dismissing, action = onDismissDispute)
+            }
         }
         if (a.status == "completed" && a.noCharge == true) {
             Banner(BannerTone.info, L("Finished with no charge."), a.noChargeReason)
@@ -787,7 +816,21 @@ fun SchedVisitBillCard(
                 if ((invoice.taxAmount ?: 0) > 0) FactRow(label = L("Tax"), value = Money.format(invoice.taxAmount, currency))
                 FactRow(label = L("Total"), value = Money.format(invoice.totalAmount, currency))
                 if ((invoice.amountPaid ?: 0) > 0) FactRow(label = L("Paid"), value = Money.format(invoice.amountPaid, currency))
+                if ((invoice.forgivenAmount ?: 0) > 0) FactRow(label = L("Forgiven@amount"), value = "−" + Money.format(invoice.forgivenAmount, currency))
                 if (invoice.status != "draft") FactRow(label = L("Balance"), value = Money.format(invoice.balanceDueAmount, currency))
+                if (stage == SchedBillStage.forgiven) {
+                    // "Perdonar saldo" (docs/family-money.md §1): what was left will not be collected.
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            invoice.forgivenAmount?.takeIf { it > 0 }?.let { LF("Balance forgiven: %@", Money.format(it, currency)) } ?: L("Balance forgiven"),
+                            style = Theme.text(14, FontWeight.Bold), color = Theme.inkStrong,
+                        )
+                        Text(
+                            listOfNotNull(invoice.forgivenBy?.name.nonEmpty, invoice.forgivenReason.nonEmpty).joinToString(" · ").nonEmpty ?: L("Nothing more to charge."),
+                            style = Theme.text(14), color = Theme.inkSoft,
+                        )
+                    }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (canCollect) {
                         PMButton(LF("Collect %@", Money.format(collectAmount, currency)), systemImage = "hand-coins", size = ButtonSize.compact) {

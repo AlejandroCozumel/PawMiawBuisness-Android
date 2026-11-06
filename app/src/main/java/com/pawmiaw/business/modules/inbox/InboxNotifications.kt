@@ -187,6 +187,7 @@ object InboxNotificationText {
         "routine_course_ending", "routine_course_ended", "provider_appointment", "provider_appointment_confirmation",
         "provider_client_invitation", "provider_follow_up", "provider_invoice", "provider_link_request",
         "provider_paperwork_late", "provider_paperwork_today", "provider_record", "record", "records_documentation", "routine",
+        "visit_dispute",
     )
 
     /** A notice whose date can be missed (a task, a dose); an event's date is when it happened. */
@@ -302,6 +303,8 @@ object InboxNotificationText {
         "appointment_confirmation" -> L("Confirm appointment")
         "appointment_reschedule" -> L("Review change")
         "provider_appointment" -> L("Open visit@notification")
+        // A family's "Sí fuimos" after a no-show: the visit, where the business decides.
+        "visit_dispute" -> L("Open visit@notification")
         "household_appointment", "appointment" -> L("View appointment")
         "stay" -> L("Open stay")
         "provider_record" -> L("Open record")
@@ -325,7 +328,7 @@ object InboxNotificationText {
     /** Where a tap goes (lib/notification-routing.ts `getNotificationActionUrl`), as a screen of the app. */
     fun route(n: InboxNotification): ProviderRoute? {
         val generic = setOf("/app/notifications", "/provider/notifications")
-        val knownFallback = setOf("provider_appointment", "provider_follow_up", "provider_record", "records_documentation", "provider_invoice", "invoice", "billing", "client_message")
+        val knownFallback = setOf("provider_appointment", "visit_dispute", "provider_follow_up", "provider_record", "records_documentation", "provider_invoice", "invoice", "billing", "client_message")
         val source = n.sourceType ?: ""
         val url = n.actionUrl
         if (source.startsWith("hospital") && url != null && !url.startsWith("/provider")) {
@@ -338,6 +341,8 @@ object InboxNotificationText {
         val id = n.sourceId.nonEmpty
         return when (source) {
             "provider_appointment" -> id?.let { ProviderRoute.appointment(it) }
+            // A family's "Sí fuimos" after a no-show (docs/family-money.md §5): `{appointmentId}:disputed:{at}`.
+            "visit_dispute" -> id?.substringBefore(':')?.nonEmpty?.let { ProviderRoute.appointment(it) }
             "provider_follow_up" -> ProviderRoute.section(ProviderSection.records)
             "provider_record", "records_documentation" -> id?.let { ProviderRoute.record(it) } ?: ProviderRoute.section(ProviderSection.records)
             "provider_invoice", "invoice", "billing" -> ProviderRoute.section(ProviderSection.invoices)
