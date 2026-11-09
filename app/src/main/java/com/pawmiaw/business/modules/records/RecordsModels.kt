@@ -120,8 +120,14 @@ data class RecordsRecord(
     val signedBy: RecordsActor? = null,
     val amendedAt: String? = null,
     val revision: Int? = null,
+    /** The latest signed version: 1 as first signed, 2+ once corrected and signed again; null for a draft. */
+    val signedVersion: Int? = null,
 ) {
     val kind: RecordsKind get() = RecordsKind.of(recordType)
+    /** The version everyone reads once a correction was signed (2+); null for version 1 or a draft. */
+    val correctedVersion: Int? get() = signedVersion?.takeIf { it > 1 && isSigned }
+    /** "versión 2" beside the signed line, once a correction was signed. */
+    val versionLabel: String? get() = correctedVersion?.let { LF("version %d", it) }
     val isDraft: Boolean get() = status == "draft"
     val isSigned: Boolean get() = status == "active"
     val files: List<RecordsAttachment> get() = attachments ?: emptyList()
@@ -180,6 +186,99 @@ data class RecordsFollowUp(
 
     val petFilter: RecordsPetFilter
         get() = RecordsPetFilter(id = providerClientPetId, clientId = providerClientId, name = petName.nonEmpty ?: "—", clientName = clientName.nonEmpty ?: "—", species = petSpecies, photoUrl = petPhotoUrl)
+}
+
+// MARK: - Signed versions (paw-miaw-backend cce7bbd, "Signed corrections")
+
+/** What one signed correction changed, already in the reader's words ("Dosis", "1 tableta", "½ tableta"). */
+@Serializable
+data class RecordsVersionChange(
+    val field: String = "",
+    val label: String = "",
+    val before: String = "",
+    val after: String = "",
+    val important: Boolean = false,
+) {
+    /** "Dosis: 1 tableta → ½ tableta". */
+    val line: String get() = "${label.ifBlank { this.field }}: ${before.ifBlank { "—" }} → ${after.ifBlank { "—" }}"
+}
+
+/**
+ * One signed version of a record (GET /provider-records/{id}/versions, oldest first): who signed
+ * it and when, whether its signature holds, its own verify page, and what its correction changed.
+ */
+@Serializable
+data class RecordsVersion(
+    val version: Int,
+    /** A copy of this version is kept: it opens read-only. */
+    val kept: Boolean = false,
+    val signedAt: String? = null,
+    val signerName: String? = null,
+    /** valid · revoked · voided · pending · not_signed. */
+    val status: String? = null,
+    val verifyCode: String? = null,
+    val verifyUrl: String? = null,
+    val requestId: String? = null,
+    val isThis: Boolean = false,
+    /** The latest signed version: what everyone reads. */
+    val current: Boolean = false,
+    /** Signed before 9 Nov 2026, then corrected without a new signature: its copy was not kept. */
+    val correctedUnsigned: Boolean = false,
+    /** What this correction changed (empty for version 1). */
+    val changes: List<RecordsVersionChange> = emptyList(),
+    val important: Boolean = false,
+    val familyVisible: Boolean = false,
+)
+
+@Serializable
+data class RecordsVersionList(val versions: List<RecordsVersion> = emptyList())
+
+/** One kept version as it was signed (GET /provider-records/{id}/versions/{n}): read-only, never the staff note. */
+@Serializable
+data class RecordsVersionDocument(
+    val version: Int,
+    val recordType: String? = null,
+    val title: String? = null,
+    val summary: String? = null,
+    val details: String? = null,
+    val payload: Map<String, JsonElement>? = null,
+    val eventAt: String? = null,
+    val followUpAt: String? = null,
+    val signedAt: String? = null,
+    val signedByName: String? = null,
+    val current: Boolean = false,
+    val verifyUrl: String? = null,
+) {
+    /** The version as a record, to read with the record's own pieces (its fields, its kind). */
+    fun asRecord(live: RecordsRecord): RecordsRecord = live.copy(
+        recordType = recordType ?: live.recordType, title = title, summary = summary, details = details,
+        internalNote = null, payload = payload, eventAt = eventAt, followUpAt = followUpAt, attachments = null,
+        signedVersion = version,
+    )
+}
+
+/**
+ * A change to a saved record (PATCH /provider-records/{id}). On a signed record a change to what
+ * was signed is a correction its author signs in the same step ("Guardar y firmar la corrección"):
+ * the body carries `"signCorrection": true`, or the server answers 409
+ * `correction_signature_required`. A staff-only change (the internal note, the assignee) makes no
+ * new version, flag or not. A signed record never goes back to draft.
+ */
+object RecordsCorrection {
+    /** Saving this record is a correction its author signs. */
+    fun signs(record: RecordsRecord?): Boolean = record?.isSigned == true
+
+    /** The PATCH body: the fields, the revision the editor loaded, and on a signed record its signature. */
+    fun patchBody(record: RecordsRecord, fields: Map<String, Any?>): LinkedHashMap<String, Any?> =
+        patchBody(fields, revision = record.revision, signed = record.isSigned)
+
+    fun patchBody(fields: Map<String, Any?>, revision: Int?, signed: Boolean): LinkedHashMap<String, Any?> {
+        val body = LinkedHashMap(fields)
+        if (signed && body["status"] == "draft") body.remove("status")
+        revision?.let { body["expectedRevision"] = it }
+        if (signed) body["signCorrection"] = true
+        return body
+    }
 }
 
 /** The pet a list is narrowed to: enough to name it and open its chart. */
@@ -343,6 +442,12 @@ object RecordsAPI {
     }
 
     suspend fun update(id: String, body: Map<String, Any?>): RecordsRecord = API.patch("/provider-records/$id", body)
+
+    /** Every signed version of a record, oldest first, with what each correction changed. */
+    suspend fun versions(id: String): List<RecordsVersion> = API.get<RecordsVersionList>("/provider-records/$id/versions").versions
+
+    /** One kept version as it was signed (404 `version_not_kept` when its copy was not kept). */
+    suspend fun version(id: String, number: Int): RecordsVersionDocument = API.get("/provider-records/$id/versions/$number")
 
     suspend fun updateFollowUp(id: String, body: Map<String, Any?>): RecordsFollowUp = API.patch("/provider-follow-ups/$id", body)
 

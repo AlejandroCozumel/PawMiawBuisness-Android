@@ -261,6 +261,8 @@ private fun RecordsRecordSheetBody(
 
     val zone = Workspace.shared.timeZone
     val isEditing = record != null
+    /** A signed record's save is a correction its author signs in the same step (a new signed version). */
+    val correcting = RecordsCorrection.signs(record)
     val currentMember = members.firstOrNull { it.isCurrentMember == true }
     val stepOrder: List<RecordsSheetStep> =
         if (isEditing) listOf(RecordsSheetStep.details)
@@ -269,6 +271,23 @@ private fun RecordsRecordSheetBody(
     val initialStep = stepOrder.firstOrNull() ?: RecordsSheetStep.details
     val previousStep: RecordsSheetStep? = stepOrder.indexOf(step).let { index -> if (index > 0) stepOrder[index - 1] else null }
     val chosenPet = client?.pets?.firstOrNull { it.id == petId }
+
+    /**
+     * Anything at all changed since the sheet opened (the written parts, the kind's fields, the
+     * days, the assignee, the files): a signed record saved with none of it changed is no correction.
+     */
+    fun hasChanges(): Boolean {
+        val saved = record ?: return true
+        if (newFiles.isNotEmpty() || removedSaved.isNotEmpty()) return true
+        fun differs(now: String, was: String?) = now.nonEmpty != was.nonEmpty
+        if (differs(title, saved.title) || differs(summary.value, saved.summary) || differs(details.value, saved.details) || differs(internalNote.value, saved.internalNote)) return true
+        if (values.mapValues { it.value.trim() } != start.values.mapValues { it.value.trim() }) return true
+        if (assignee != start.assignee) return true
+        fun day(date: Instant?) = date?.atZone(zone)?.toLocalDate()
+        if (day(eventDate.value) != day(DateText.parse(saved.eventAt))) return true
+        if (day(followUpDate.value) != day(DateText.parse(saved.followUpAt))) return true
+        return false
+    }
 
     val isDirty: Boolean = run {
         if (newFiles.isNotEmpty() || removedSaved.isNotEmpty()) return@run true
@@ -282,7 +301,7 @@ private fun RecordsRecordSheetBody(
 
     val primaryTitle = when (step) {
         RecordsSheetStep.selection, RecordsSheetStep.type -> L("Continue")
-        RecordsSheetStep.details -> if (isEditing) L("Save record") else L("Add record")
+        RecordsSheetStep.details -> if (correcting) L("Save and sign the correction") else if (isEditing) L("Save record") else L("Add record")
     }
 
     // A client handed in by id is read once (its name and pets); with one pet, that pet.
@@ -467,6 +486,11 @@ private fun RecordsRecordSheetBody(
             rules.add("followUpDate" to L("Follow-up date cannot be in the past."))
         }
         if (!form.check(rules) || event == null) return
+        // A signed record saved as it was: no correction to sign.
+        if (correcting && !hasChanges()) {
+            dismiss()
+            return
+        }
 
         // Saved fields this kind doesn't ask for stay as they were.
         val payload = LinkedHashMap<String, Any?>()
@@ -478,6 +502,9 @@ private fun RecordsRecordSheetBody(
             if (!field.isShown(values)) continue
             val text = values[field.key]?.trim() ?: ""
             if (text.isEmpty()) continue
+            // A correction says only what was changed: a field the signed record never had, still at
+            // the form's default, stays out (else it would read as a change the family is told about).
+            if (correcting && record?.payload?.get(field.key).isNull && text == kind.defaultValue(field.key)) continue
             val number = if (field.input == RecordsField.Input.number) text.replace(",", ".").toDoubleOrNull()?.takeIf { it.isFinite() } else null
             payload[field.key] = number ?: text
         }
@@ -498,12 +525,14 @@ private fun RecordsRecordSheetBody(
         )
         val assigneeId = if (access.assignAnyone) assignee.nonEmpty else (record?.assignedMember?.id ?: currentMember?.id)
         if (assigneeId != null) body["assignedOrganizationMemberId"] = assigneeId
-        if (record != null) {
+        val request: Map<String, Any?> = if (record != null) {
             record.appointmentId.nonEmpty?.let { body["appointmentId"] = it }
-            record.revision?.let { body["expectedRevision"] = it }
+            // The revision it was opened at and, on a signed record, the signature on the correction.
+            RecordsCorrection.patchBody(record, body)
         } else {
             // Written at a visit when one was handed in; otherwise none.
             body["appointmentId"] = start.linkedAppointmentId
+            body
         }
 
         val removed = removedSaved.toList()
@@ -513,7 +542,7 @@ private fun RecordsRecordSheetBody(
             try {
                 var saved: RecordsRecord
                 try {
-                    saved = if (record != null) API.patch("/provider-records/${record.id}", body) else API.post("/provider-records", body)
+                    saved = if (record != null) API.patch("/provider-records/${record.id}", request) else API.post("/provider-records", request)
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -553,7 +582,11 @@ private fun RecordsRecordSheetBody(
                     return@launch
                 }
 
-                if (isEditing) {
+                if (record != null && correcting) {
+                    // A new signed version when what was signed changed; a staff-only change signs nothing.
+                    val corrected = (saved.signedVersion ?: 0) > (record.signedVersion ?: 0)
+                    Toast.show(if (corrected) LF("Correction signed: version %d.", saved.signedVersion ?: 2) else L("Record updated."))
+                } else if (isEditing) {
                     Toast.show(L("Record updated."))
                 } else {
                     Toast.show(if (saved.isDraft) L("Saved as a draft. It waits for a signature.") else L("Record created."))
@@ -913,8 +946,8 @@ private fun RecordsRecordSheetBody(
     ProviderModal(
         title = if (isEditing) L("Edit record") else L("Add record"),
         subtitle = if (isEditing) {
-            if (record?.isDraft == true) L("Change what is needed. It stays a draft until it is signed.")
-            else L("Change what is needed. A signed record keeps a mark that it was corrected.")
+            if (correcting) L("Change what is needed. You sign the correction, and every signed version stays.")
+            else L("Change what is needed. It stays a draft until it is signed.")
         } else L("Choose the pet, the kind of record, and write it down."),
         systemImage = "file-text",
         accent = ModalAccent.aqua,
@@ -924,7 +957,12 @@ private fun RecordsRecordSheetBody(
         isWorking = saving,
         steps = if (stepOrder.size > 1) ModalSteps(stepOrder.map { stepLabel(it) }, icons = stepOrder.map { stepIcon(it) }, current = stepOrder.indexOf(step).coerceAtLeast(0)) else null,
         onBack = previousStep?.let { previous -> { step = previous } },
-        primaryIcon = if (step == RecordsSheetStep.details) "file-text" else null,
+        primaryIcon = if (step == RecordsSheetStep.details) (if (correcting) "badge-check" else "file-text") else null,
+        // The one line under "Guardar y firmar la corrección": whose signature, and who is told.
+        primaryNote = if (correcting && step == RecordsSheetStep.details) {
+            if (record?.onPawMiaw == true) L("Your signature goes on the new version, and the family sees what changed.")
+            else L("Your signature goes on the new version.")
+        } else null,
         onPrimary = { primary() },
         // iOS `.presentationDetents([.large])`: the modal's own whole height.
         modifier = modifier,

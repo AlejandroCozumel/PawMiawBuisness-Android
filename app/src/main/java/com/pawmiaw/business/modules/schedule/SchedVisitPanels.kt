@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pawmiaw.business.*
+import com.pawmiaw.business.records.RecordsCorrection
 import com.pawmiaw.business.services.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -503,6 +504,10 @@ fun SchedVisitNote(
     var edits by remember { mutableIntStateOf(0) }
     var signing by remember { mutableStateOf(false) }
     var loadedFrom by remember { mutableStateOf<String?>(null) }
+    /** The note as signed: what a correction is measured against. */
+    var baseDetails by remember { mutableStateOf("") }
+    var baseSummary by remember { mutableStateOf("") }
+    var baseInternal by remember { mutableStateOf("") }
     // One save at a time: a save still on its way is never overtaken by the next one.
     val saves = remember { Mutex() }
 
@@ -514,6 +519,8 @@ fun SchedVisitNote(
     val editable = canWrite && (!signed || canSign)
     val linked = appointment.clientHouseholdId != null
     val empty = details.nonEmpty == null && summary.nonEmpty == null && internalNote.nonEmpty == null
+    /** A signed note whose findings or summary changed here: saved only as a signed correction. */
+    val correctionPending = signed && (details.nonEmpty != baseDetails.nonEmpty || summary.nonEmpty != baseSummary.nonEmpty)
 
     /** Someone else's save (or a refresh) replaces the text only when nothing here is unsaved. */
     fun adopt() {
@@ -525,6 +532,9 @@ fun SchedVisitNote(
         details = current.details ?: ""
         summary = current.summary ?: ""
         internalNote = current.internalNote ?: ""
+        baseDetails = details
+        baseSummary = summary
+        baseInternal = internalNote
         loadedFrom = current.id
     }
 
@@ -532,12 +542,23 @@ fun SchedVisitNote(
         state = NoteSaveState.saving
         try {
             val id = recordId
-            if (id != null) {
+            if (id != null && signed) {
+                // Signed: only the staff-only note saves on its own (no correction, nothing to sign).
+                val saved: SchedRecord = SchedAPI.send(
+                    "PATCH", "/provider-records/$id",
+                    mapOf("internalNote" to internalNote.nonEmpty, "expectedRevision" to revision),
+                )
+                revision = saved.revision ?: (revision + 1)
+                baseInternal = internalNote
+            } else if (id != null) {
                 val saved: SchedRecord = SchedAPI.send(
                     "PATCH", "/provider-records/$id",
                     mapOf("details" to details.nonEmpty, "summary" to summary.nonEmpty, "internalNote" to internalNote.nonEmpty, "expectedRevision" to revision),
                 )
                 revision = saved.revision ?: (revision + 1)
+                baseDetails = details
+                baseSummary = summary
+                baseInternal = internalNote
             } else {
                 val created: SchedRecord = SchedAPI.send(
                     "POST", "/provider-records",
@@ -557,6 +578,9 @@ fun SchedVisitNote(
                 recordId = created.id
                 revision = created.revision ?: 0
                 loadedFrom = created.id
+                baseDetails = details
+                baseSummary = summary
+                baseInternal = internalNote
             }
             if (state == NoteSaveState.saving) state = NoteSaveState.saved
             savedAt = Instant.now()
@@ -571,6 +595,51 @@ fun SchedVisitNote(
             state = NoteSaveState.error
             schedToast(e)
         }
+    }
+
+    /**
+     * "Guardar y firmar la corrección": the signed note's new findings or summary (and the
+     * staff-only note with them) as a new version its author signs now.
+     */
+    suspend fun saveCorrection() {
+        val id = recordId ?: return
+        if (state == NoteSaveState.saving) return
+        saves.withLock {
+            state = NoteSaveState.saving
+            try {
+                val fields = mapOf("details" to details.nonEmpty, "summary" to summary.nonEmpty, "internalNote" to internalNote.nonEmpty)
+                val saved: SchedRecord = SchedAPI.send("PATCH", "/provider-records/$id", RecordsCorrection.patchBody(fields, revision = revision, signed = true))
+                revision = saved.revision ?: (revision + 1)
+                details = saved.details ?: details
+                summary = saved.summary ?: summary
+                baseDetails = details
+                baseSummary = summary
+                baseInternal = internalNote
+                if (state == NoteSaveState.saving) state = NoteSaveState.saved
+                savedAt = Instant.now()
+                Toast.show(saved.signedVersion?.let { LF("Correction signed: version %d.", it) } ?: L("Correction signed."))
+                announceDataChanged()
+                onChanged()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                if ((e as? SchedFailure)?.code == "record_changed") {
+                    state = NoteSaveState.conflict
+                    return@withLock
+                }
+                // The edits stay here, waiting for the button again.
+                state = NoteSaveState.dirty
+                schedToast(e)
+            }
+        }
+    }
+
+    /** Back to the note as signed: nothing to correct, nothing to sign. */
+    fun undoCorrection() {
+        details = baseDetails
+        summary = baseSummary
+        internalNote = baseInternal
+        state = NoteSaveState.saved
     }
 
     suspend fun signNow() {
@@ -606,9 +675,10 @@ fun SchedVisitNote(
 
     LaunchedEffect(note?.revision) { adopt() }
     LaunchedEffect(edits) {
-        if (state != NoteSaveState.dirty) return@LaunchedEffect
+        // A correction to a signed note waits for its button: it is signed, never saved on its own.
+        if (state != NoteSaveState.dirty || correctionPending) return@LaunchedEffect
         delay(1200)
-        if (state != NoteSaveState.dirty) return@LaunchedEffect
+        if (state != NoteSaveState.dirty || correctionPending) return@LaunchedEffect
         scope.launch { save() }
     }
 
@@ -616,8 +686,10 @@ fun SchedVisitNote(
         NoteSaveState.saving -> L("Saving…")
         NoteSaveState.dirty -> L("Unsaved")
         NoteSaveState.error -> L("Not saved")
-        else -> if (signed) LF("Signed by %@ · %@", note?.signedBy?.name ?: "—", DateText.time(note?.signedAt))
-            else if (note != null || state == NoteSaveState.saved) L("Draft saved") else L("Not started")
+        else -> if (signed) {
+            LF("Signed by %@ · %@", note?.signedBy?.name ?: "—", DateText.time(note?.signedAt)) +
+                (note?.signedVersion?.takeIf { it > 1 }?.let { " · ${LF("version %d", it)}" } ?: "")
+        } else if (note != null || state == NoteSaveState.saved) L("Draft saved") else L("Not started")
     }
     val footer = when (state) {
         NoteSaveState.saving -> L("Saving…")
@@ -655,7 +727,7 @@ fun SchedVisitNote(
                 }
             }
             if (signed && editable) {
-                Text(L("Signed — changes you make reach the family and are marked as a correction."), style = Theme.captionFont, color = Theme.inkSoft)
+                Text(L("Signed — to change it, save and sign the correction. The staff-only note saves on its own."), style = Theme.captionFont, color = Theme.inkSoft)
             }
             Disabled(!editable) {
                 PMTextField(L("What you found and did"), text = field({ details }, { details = it }), hint = L("History, exam, diagnosis, treatment. Part of the chart."), multiline = true)
@@ -680,6 +752,25 @@ fun SchedVisitNote(
             }
             Disabled(!editable) {
                 PMTextField(L("Staff only"), text = field({ internalNote }, { internalNote = it }), hint = L("Never shown to the family."), multiline = true)
+            }
+            if (correctionPending && editable) {
+                // "Guardar y firmar la corrección", the same one tap as "Firmar", and the one line under it.
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    PMButton(
+                        L("Save and sign the correction"), systemImage = "badge-check", fullWidth = true,
+                        isWorking = state == NoteSaveState.saving,
+                    ) {
+                        scope.launch { saveCorrection() }
+                    }
+                    Text(
+                        if (linked) L("Your signature goes on the new version, and the family sees what changed.") else L("Your signature goes on the new version."),
+                        style = Theme.text(13), color = Theme.inkSoft, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                PMButton(
+                    L("Undo the changes"), systemImage = "rotate-ccw", variant = ButtonVariant.outline, size = ButtonSize.compact,
+                    enabled = state != NoteSaveState.saving,
+                ) { undoCorrection() }
             }
             if (canWrite && !signed) {
                 val tint = if (state == NoteSaveState.error) Theme.destructive else Theme.inkSoft

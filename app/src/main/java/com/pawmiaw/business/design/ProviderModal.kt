@@ -64,6 +64,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
@@ -248,6 +249,8 @@ val LocalModalAsPage = compositionLocalOf { false }
  * - `secondaryActions`: more footer buttons, between the primary action and Cancel.
  * - `primaryIcon`: the primary action's icon (a check, a save disk), when the web's has one.
  * - `footerSummary`: a line over the footer's buttons (a total, the vaccines' state).
+ * - `primaryNote`: one line under the primary action saying what it does ("Your signature goes
+ *   on the new version…"); the buttons stack for it, so a long action reads in full.
  * - `showsCancel`: false where the web's footer has no Cancel (a sheet whose work is done).
  * - `pebbleImageURL`: a photo in the pebble instead of the icon (a pet's sheet).
  * - `showsBody`: false for a question with nothing between its header and its answer; no
@@ -274,6 +277,7 @@ fun ProviderModal(
     primaryIcon: String? = null,
     primaryDisabled: Boolean = false,
     footerSummary: (@Composable () -> Unit)? = null,
+    primaryNote: String? = null,
     showsCancel: Boolean = true,
     pebbleImageURL: String? = null,
     showsBody: Boolean = true,
@@ -350,6 +354,7 @@ fun ProviderModal(
             hasBody = hasBody,
             inCard = inCard,
             footerSummary = footerSummary,
+            primaryNote = primaryNote,
             primaryTitle = primaryTitle,
             onPrimary = onPrimary,
             primaryIcon = primaryIcon,
@@ -452,6 +457,7 @@ private fun ModalFooter(
     hasBody: Boolean,
     inCard: Boolean,
     footerSummary: (@Composable () -> Unit)?,
+    primaryNote: String?,
     primaryTitle: String?,
     onPrimary: (() -> Unit)?,
     primaryIcon: String?,
@@ -535,7 +541,7 @@ private fun ModalFooter(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             footerSummary?.invoke()
-            if (buttonCount == 2) {
+            if (buttonCount == 2 && primaryNote == null) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     // Cancel or Back on the left; with neither, the one other action takes its place.
                     if (leadingCount == 1) {
@@ -547,7 +553,15 @@ private fun ModalFooter(
                 }
             } else if (buttonCount > 0) {
                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Primary(Modifier.fillMaxWidth())
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Primary(Modifier.fillMaxWidth())
+                        if (primaryNote != null && hasPrimary) {
+                            Text(
+                                primaryNote, style = Theme.text(13), color = Theme.inkSoft, textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
                     secondaryActions.forEach { extra -> Extra(extra, Modifier.fillMaxWidth()) }
                     Leading(Modifier.fillMaxWidth())
                 }
@@ -620,6 +634,8 @@ fun ConfirmSheet(
     confirmIcon: String? = null,
     confirmWord: String? = null,
     confirmHint: String? = null,
+    /** One line under the action saying what it does (the footer stacks for it). */
+    confirmNote: String? = null,
     modifier: Modifier = Modifier,
     action: suspend (String?) -> Unit,
 ) {
@@ -647,6 +663,7 @@ fun ConfirmSheet(
         cancelTitle = cancelTitle,
         primaryIcon = confirmIcon ?: (if (destructive) "triangle-alert" else null),
         primaryDisabled = !typedMatches,
+        primaryNote = confirmNote,
         showsBody = hasBody,
         onPrimary = onPrimary@{
             if (askReason && reasonRequired) {

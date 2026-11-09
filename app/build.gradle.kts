@@ -81,4 +81,5 @@ dependencies {
     implementation(libs.mlkit.barcode)
     implementation(libs.play.services.location)
     debugImplementation(libs.compose.ui.tooling)
+    testImplementation(libs.junit)
 }

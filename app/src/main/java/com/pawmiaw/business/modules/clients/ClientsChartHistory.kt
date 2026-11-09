@@ -508,7 +508,9 @@ private fun RecordBody(record: ClientsChartRecord, t: ClientsTimelineContext) {
                 LF("Draft by %@", record.createdBy?.name ?: L("someone on the team"))
             } else {
                 LF("Signed by %@ · %@", record.signedBy?.name ?: "—", ClientsText.shortDay(record.signedAt ?: record.eventAt)) +
-                    (record.amendedAt?.let { " · ${LF("corrected %@", ClientsText.shortDay(it))}" } ?: "")
+                    (record.amendedAt?.let { " · ${LF("corrected %@", ClientsText.shortDay(it))}" } ?: "") +
+                    // A correction signed as a new version: the one everyone reads.
+                    (record.signedVersion?.takeIf { it > 1 }?.let { " · ${LF("version %d", it)}" } ?: "")
             }
             Box(Modifier.heightIn(min = 40.dp), contentAlignment = Alignment.CenterStart) {
                 Text(signedLine, style = Theme.text(12), color = Theme.inkSoft)

@@ -638,6 +638,8 @@ data class SchedRecord(
     val signedAt: String? = null,
     val signedBy: SchedActor? = null,
     val revision: Int? = null,
+    /** The latest signed version (2+ once a correction was signed); null for a draft. */
+    val signedVersion: Int? = null,
 ) {
     /** Every record counts; the visit's own note only once it has words. */
     val hasWords: Boolean

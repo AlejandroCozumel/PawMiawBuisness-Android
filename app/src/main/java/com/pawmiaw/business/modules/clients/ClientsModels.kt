@@ -506,6 +506,8 @@ data class ClientsChartRecord(
     val attachments: List<ClientsAttachment>? = null,
     val actionable: Boolean? = null,
     val carriedOver: Boolean? = null,
+    /** The latest signed version (2+ once a correction was signed); null for a draft or an older server. */
+    val signedVersion: Int? = null,
 )
 
 @Serializable

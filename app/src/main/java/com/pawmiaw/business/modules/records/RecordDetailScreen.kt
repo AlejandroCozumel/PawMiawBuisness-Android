@@ -67,7 +67,7 @@ import kotlinx.serialization.json.JsonPrimitive
 //
 
 /** The cards the header's numbers and the ⋯ menu jump to (iOS `.id(…)` + `ScrollViewReader`). */
-private val recordDetailTargets = listOf("record-note", "record-files", "record-follow-ups", "record-visit", "record-history")
+private val recordDetailTargets = listOf("record-note", "record-versions", "record-files", "record-follow-ups", "record-visit", "record-history")
 
 /** Scrolls the card to the top of the page (iOS `proxy.scrollTo(target, anchor: .top)`). */
 @OptIn(ExperimentalFoundationApi::class)
@@ -101,8 +101,30 @@ fun RecordDetailScreen(recordId: String, modifier: Modifier = Modifier) {
     var discarded by remember { mutableStateOf(false) }
     var scrollTarget by remember { mutableStateOf<String?>(null) }
     val targets = remember { recordDetailTargets.associateWith { BringIntoViewRequester() } }
+    /** A signed record's versions, oldest first (null while they load). */
+    var versions by remember { mutableStateOf<List<RecordsVersion>?>(null) }
+    var versionsFailed by remember { mutableStateOf(false) }
+    var versionsAttempt by remember { mutableStateOf(0) }
+    /** A kept earlier version opened read-only. */
+    var openVersion by remember { mutableStateOf<Int?>(null) }
+    /** A clinical state chosen on a signed record, waiting for its correction to be signed. */
+    var pendingState by remember { mutableStateOf<String?>(null) }
 
     val access = RecordsAccess(workspace)
+
+    // The chain is read again whenever the record changes (a correction signed here or elsewhere).
+    val versionsKey = record?.takeIf { it.isSigned }?.let { "${it.id}:${it.signedVersion}:${it.revision}:${it.amendedAt}" }
+    LaunchedEffect(versionsKey, versionsAttempt) {
+        val signed = record?.takeIf { it.isSigned } ?: return@LaunchedEffect
+        versionsFailed = false
+        try {
+            versions = RecordsAPI.versions(signed.id)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (versions == null) versionsFailed = true
+        }
+    }
 
     LaunchedEffect(scrollTarget) {
         val target = scrollTarget ?: return@LaunchedEffect
@@ -163,8 +185,8 @@ fun RecordDetailScreen(recordId: String, modifier: Modifier = Modifier) {
         }
     }
 
-    fun changeClinicalState(current: RecordsRecord, next: String) {
-        if (changingState || current.kind.clinicalState(current.payload) == next) return
+    /** The record's fields with its clinical state moved to `next` (null for a kind without one). */
+    fun clinicalPayload(current: RecordsRecord, next: String): Map<String, Any?>? {
         val payload = LinkedHashMap<String, JsonElement>(current.payload ?: emptyMap())
         val today = DateText.dayKey()
         when (current.kind) {
@@ -182,17 +204,38 @@ fun RecordDetailScreen(recordId: String, modifier: Modifier = Modifier) {
                 }
             }
             RecordsKind.allergy -> payload["status"] = JsonPrimitive(next)
-            else -> return
+            else -> return null
+        }
+        return payload.mapValues { recordsPlainValue(it.value) }
+    }
+
+    /** Saves the new clinical state; on a signed record it is a correction its author signs now. */
+    suspend fun saveClinicalState(current: RecordsRecord, next: String) {
+        val plain = clinicalPayload(current, next) ?: return
+        val saved = RecordsAPI.update(current.id, RecordsCorrection.patchBody(current, mapOf("payload" to plain)))
+        record = saved
+        val now = LF("Now %@.", RecordsText.clinicalStateLabel(next).lowercase())
+        val newVersion = saved.signedVersion
+        if (current.isSigned && newVersion != null && newVersion > (current.signedVersion ?: 0)) {
+            Toast.show("${LF("Correction signed: version %d.", newVersion)} $now")
+        } else {
+            Toast.show("${LF("%@ updated.", current.kind.label)} $now")
+        }
+        announceDataChanged()
+    }
+
+    fun changeClinicalState(current: RecordsRecord, next: String) {
+        if (changingState || current.kind.clinicalState(current.payload) == next) return
+        if (clinicalPayload(current, next) == null) return
+        // A signed record: the change is a correction, signed with "Guardar y firmar la corrección".
+        if (RecordsCorrection.signs(current)) {
+            pendingState = next
+            return
         }
         changingState = true
         scope.launch {
             try {
-                val plain: Map<String, Any?> = payload.mapValues { recordsPlainValue(it.value) }
-                val body = linkedMapOf<String, Any?>("payload" to plain)
-                current.revision?.let { body["expectedRevision"] = it }
-                record = RecordsAPI.update(current.id, body)
-                Toast.show("${LF("%@ updated.", current.kind.label)} ${LF("Now %@.", RecordsText.clinicalStateLabel(next).lowercase())}")
-                announceDataChanged()
+                saveClinicalState(current, next)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -380,8 +423,10 @@ fun RecordDetailScreen(recordId: String, modifier: Modifier = Modifier) {
         val signer = record.signedBy?.name.nonEmpty
         val empty = summary == null && details == null && staffNote == null
         val familyAudience = if (!record.onPawMiaw) L("Not on PawMiaw") else if (record.isSigned) L("The family sees this") else L("The family sees it once signed")
-        val hint = if (record.isSigned) LF("Signed %@ by %@", RecordsText.dateTime(record.signedAt), signer ?: L("someone on the team"))
-        else L("A draft — only your team can see it.")
+        val hint = if (record.isSigned) {
+            LF("Signed %@ by %@", RecordsText.dateTime(record.signedAt), signer ?: L("someone on the team")) +
+                (record.versionLabel?.let { " · $it" } ?: "")
+        } else L("A draft — only your team can see it.")
         SectionCard(
             title = L("Note"), subtitle = hint, icon = "file-text", modifier = modifier,
             trailing = {
@@ -531,6 +576,17 @@ fun RecordDetailScreen(recordId: String, modifier: Modifier = Modifier) {
                 actionTitle = if (access.signRecords) L("Sign") else null,
                 action = if (access.signRecords) ({ sign(record) }) else null,
             )
+        } else if (record.correctedVersion != null) {
+            // A signed correction: a new version its author signed.
+            val version = record.correctedVersion ?: 2
+            val day = RecordsText.dateTime(record.amendedAt ?: record.updatedAt)
+            NoticeCard(
+                tone = NoticeCard.Tone.info,
+                title = if (record.onPawMiaw) LF("Corrected and signed %1\$@ (version %2\$d). The family sees this version.", day, version)
+                else LF("Corrected and signed %1\$@ (version %2\$d).", day, version),
+                actionTitle = L("See the signed versions"),
+                action = { scrollTarget = "record-versions" },
+            )
         } else if (record.amendedAt.nonEmpty != null) {
             NoticeCard(
                 tone = NoticeCard.Tone.info,
@@ -542,6 +598,18 @@ fun RecordDetailScreen(recordId: String, modifier: Modifier = Modifier) {
         record.kind.clinicalStates?.let { states -> ClinicalCard(record, states, canChange = canEditThis) }
 
         NoteSection(record, onEdit = openEdit, modifier = Modifier.bringIntoViewRequester(targets.getValue("record-note")))
+
+        // Where the signature is shown: every signed version, each with its own verify page.
+        if (record.isSigned) {
+            RecordsVersionsSection(
+                record = record,
+                versions = versions,
+                failed = versionsFailed,
+                onOpen = { openVersion = it.version },
+                onRetry = { versionsAttempt += 1 },
+                modifier = Modifier.bringIntoViewRequester(targets.getValue("record-versions")),
+            )
+        }
 
         val rows = RecordsPayload.rows(record)
         if (rows.isNotEmpty()) {
@@ -655,7 +723,10 @@ fun RecordDetailScreen(recordId: String, modifier: Modifier = Modifier) {
                 }
                 if (record.signedAt.nonEmpty != null) {
                     RowDivider()
-                    RecordsLabelledRow(label = L("Signed"), value = RecordsText.actorLine(record.signedBy?.name, record.signedAt))
+                    RecordsLabelledRow(
+                        label = L("Signed"),
+                        value = RecordsText.actorLine(record.signedBy?.name, record.signedAt) + (record.versionLabel?.let { " · $it" } ?: ""),
+                    )
                 }
                 if (record.amendedAt.nonEmpty != null) {
                     RowDivider()
@@ -711,6 +782,37 @@ fun RecordDetailScreen(recordId: String, modifier: Modifier = Modifier) {
         }
     }
     val current = record
+    val versionNumber = openVersion
+    if (versionNumber != null && current != null) {
+        key(versionNumber) {
+            AppSheet(onDismissRequest = { openVersion = null }) {
+                RecordsVersionSheet(record = current, number = versionNumber, latest = versions?.lastOrNull { it.current }?.version ?: current.signedVersion ?: versionNumber)
+            }
+        }
+    }
+    val nextState = pendingState
+    if (nextState != null && current != null) {
+        // A signed record's clinical state is part of what was signed: changing it is a correction
+        // its author signs now, the same one tap as "Firmar".
+        AppSheet(onDismissRequest = { pendingState = null }) {
+            ConfirmSheet(
+                title = LF("Change it to “%@”?", RecordsText.clinicalStateLabel(nextState)),
+                message = LF("%@ is signed: the change is a correction you sign now.", current.titleText),
+                confirmTitle = L("Save and sign the correction"),
+                confirmIcon = "badge-check",
+                accent = ModalAccent.aqua,
+                icon = "badge-check",
+                confirmNote = if (current.onPawMiaw) L("Your signature goes on the new version, and the family sees what changed.") else L("Your signature goes on the new version."),
+            ) {
+                changingState = true
+                try {
+                    saveClinicalState(current, nextState)
+                } finally {
+                    changingState = false
+                }
+            }
+        }
+    }
     if (confirmDiscard && current != null) {
         AppSheet(onDismissRequest = {
             confirmDiscard = false
