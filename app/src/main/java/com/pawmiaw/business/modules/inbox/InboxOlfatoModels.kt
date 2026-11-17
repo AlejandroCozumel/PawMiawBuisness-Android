@@ -367,6 +367,9 @@ data class InboxOlfatoMessageRow(
     val tools: List<InboxOlfatoTool>? = null,
     val links: List<InboxOlfatoLink>? = null,
     val feedback: InboxOlfatoFeedback? = null,
+    /** What of the pet's chart the reply was written from; an older server sends none. */
+    @Serializable(with = InboxOlfatoSourcesSerializer::class)
+    val sources: List<InboxOlfatoSource> = emptyList(),
 )
 
 @Serializable
@@ -389,6 +392,7 @@ data class InboxOlfatoMessage(
     var feedback: InboxOlfatoFeedback? = null,
     var tools: List<InboxOlfatoTool> = emptyList(),
     var links: List<InboxOlfatoLink> = emptyList(),
+    var sources: List<InboxOlfatoSource> = emptyList(),
     var seq: Int? = null,
 ) {
     enum class Status(val rawValue: String) { thinking("thinking"), streaming("streaming"), done("done"), stopped("stopped"), error("error") }
@@ -409,6 +413,7 @@ data class InboxOlfatoMessage(
         feedback = if (row.role != "user") row.feedback else null,
         tools = if (row.role != "user") (row.tools ?: emptyList()) else emptyList(),
         links = if (row.role != "user") (row.links ?: emptyList()) else emptyList(),
+        sources = if (row.role != "user") row.sources else emptyList(),
         seq = row.seq,
     )
 

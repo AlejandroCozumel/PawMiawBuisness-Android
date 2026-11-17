@@ -344,6 +344,7 @@ class InboxOlfatoChatModel(chatId: String?, petId: String?, petName: String?) {
                                     status = InboxOlfatoMessage.Status.thinking
                                     tools = emptyList()
                                     links = emptyList()
+                                    sources = emptyList()
                                 }
                                 val fromId = replyId
                                 replyId = serverReply.id

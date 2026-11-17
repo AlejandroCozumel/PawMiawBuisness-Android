@@ -820,6 +820,10 @@ fun InboxOlfatoReply(
                         }
                     }
                 }
+                // What it was written from ("Fuentes"), under a reply that finished or was stopped.
+                if (message.status == InboxOlfatoMessage.Status.done || message.status == InboxOlfatoMessage.Status.stopped) {
+                    InboxOlfatoSources(message.sources, language)
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (message.content.isNotEmpty()) {
                         IconCircleButton(systemImage = if (copied) "check" else "copy", label = L("Copy reply")) {
